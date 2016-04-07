@@ -4,3 +4,7 @@
 
 # org files to be exported to another format
 /*-export.org
+
+# emacs autosave files
+.\#*\#?
+.\#*
