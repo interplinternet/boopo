@@ -1,0 +1,22 @@
+* Boopo's Escape
+This is a small, simple project. You fly a spaceship from one end of the screen to the other while avoiding being shot by the turret, which can be randomly placed.
+* Current progress:
+A ship and turret can be rendered on the background.
+* TODO [0/2]
++ [ ] Determine primary data structure
++ [ ] Add turret tracking
+* Data
+** Player
+Currently, a player is represented as a struct: (player Natural Rational Polar) in (player a r l)
+- a :: [-50,50] represents the current rate at which the player is accelerating
+- r :: [0,360] represents the rotation of the ship, where 0 is facing right and 90 is facing up
+- l :: (polar Natural Rational) represents the location of the ship as a polar number, where the magnitude is the distance from the origin, the upper left, of the screen and the angle represents the angle.
+*** Notes
+I thought that representing the rotation of the ship would be convenient for determining it's direction in acceleration, but if we're representing its location as a polar number then we have to do a series of conversions to translate the angle, compare to the angle from the origin, and then push the ship in that direction after converting acceleration to speed.
+In fact, it might also be more convenient to change acceleration to speed, but that seems a little less fun/challenging.
+** Turret
+The turret hasn't been implemented yet, here are some ideas:
+- The turret tracks the players location.
+- every 'R' seconds, it records the player's current location.
+- After recording three such locations, it determines a best-fit linear function between the three points (such as in a scatter-plot).
+- It then fires at a location f(x), taking into account the player's speed along.

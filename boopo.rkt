@@ -47,6 +47,9 @@
 (define (fly-ship p)
   (make-magnitude
    ; what if we're flying straight up?
+   ; changing this to a physical vector instead of a polar number might work out much better for the acceleration model of the game
+   ; oh, boopo.
+   ; boopo, boopo!
    (+ (magnitude p) (player-accel p))
    (angle p)))
 
