@@ -20,3 +20,4 @@ The turret hasn't been implemented yet, here are some ideas:
 - every 'R' seconds, it records the player's current location.
 - After recording three such locations, it determines a best-fit linear function between the three points (such as in a scatter-plot).
 - It then fires at a location f(x), taking into account the player's speed along.
+** here
