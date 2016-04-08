@@ -38,14 +38,14 @@ A ship and turret can be rendered on the background.
 
 ## Pvectors<a id="orgheadline4"></a>
 
-A 2-dimensional vector, (pvector Integer Integer) in (pvector x y) can represent:
+A 2-dimensional vector, `(pvector Integer Integer)` in `(pvector x y)` can represent:
 
 -   **x:** the ship's velocity in the horizontal plane, or its horizontal distance from the origin
 -   **y:** the ship's velocity in the vertical plane, or its vertical distance from the origin
 
 ## Player<a id="orgheadline6"></a>
 
-Currently, a player is represented as a struct: (player Pvector Natural Pvector) in (player v r l)
+Currently, a player is represented as a struct: `(player Pvector Natural Pvector)` in `(player v r l)`
 
 -   **v:** A Pvector representing the ship's velocity in x- and y-coords.
 -   **r:** [0,360] represents the rotation of the ship, where 0 is facing right and 90 is facing up. Later on, this should an accumulated value representing the heading of the ship's velocity.
