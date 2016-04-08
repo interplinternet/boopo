@@ -1,4 +1,0 @@
-* Test
-This is a file purely for testing branching.
-* Yet another test
-Here it is.
