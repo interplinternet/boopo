@@ -46,7 +46,7 @@
 ; -> Player
 ; the game's state, for now, is just a player
 (define (start)
-  (big-bang (player 0 0 (random WIDTH))
+  (big-bang (player (pvec 0 0) 0 (pvec (random WIDTH) (random HEIGHT)))
             [on-key direct-ship]
             [on-tick fly-ship]
             [to-draw render-game]))
@@ -66,11 +66,12 @@
 (define (direct-ship p ke)
   (define vel (player-veloc p))
   (define loc (player-locat p))
+  (define rot (player-rotat p))
   (match ke
-    ["left" (vec+ vel (pvec -1 0))]
-    ["right" (vec+ vel (pvec 1 0))]
-    ["up" (vec+ vel (pvec 0 1))]
-    ["down" (vec+ vel (pvec 0 -1))]
+    ["left"  (player (vec+ vel (pvec -1 0)) (+ rot 10) loc)]
+    ["right" (player (vec+ vel (pvec 1 0))  (- rot 10) loc)]
+    ["up"    (player (vec+ vel (pvec 0 -1))  rot loc)]
+    ["down"  (player (vec+ vel (pvec 0 1)) rot loc)]
     [_ p]))
 
 ; Player -> Player
