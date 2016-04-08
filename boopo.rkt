@@ -3,14 +3,29 @@
 ; -------------------------------------------------------------------------------------
 #| DATA |#
 ; -------------------------------------------------------------------------------------
-(struct player (accel rotat locat))
+(struct pvec (x y) #:transparent)
+; pvec = (pvec Rational Rational)
+; in (pvec x y v)
+; -- x is the x-val
+; -- y is the y-val
+; New location = velocity applied to current location. Velocity is also a vectory
+; A location can be either a singular point
+; or the vector representing the difference between location and origin
+
+(struct player (veloc rotat locat) #:transparent)
 ; player = (player Integer Integer Polar)
 ; in (player a r l)
-; -- a is the rate at which the player is accelerating,
-;    positive for faster, negative for slower
+; -- a is the player's velocity
 ; -- r is the player's current rotation, used for determining direction and rendering
 ;   positive is counter-clockwise and negative is clockwise
+;   is this really necessary? Since velocity is directed, isn't it redundant to
+;   mention direction twice?
 ; -- l is the player's location, expressed as an angle and magnitude from the upper left
+; -------------------------------------------------------------------------------------
+#| DATA EXAMPLES |#
+; -------------------------------------------------------------------------------------
+(define ex-p ; a player moving at 1,1 velocity, 0° rotation, 100,100 units from origin
+  (player (pvec 1 1) 0 (pvec 100 100)))
 
 ; -------------------------------------------------------------------------------------
 #| PHYSICAL CONSTANTS |#
@@ -39,32 +54,39 @@
 ; -------------------------------------------------------------------------------------
 #| LOGIC |#
 ; -------------------------------------------------------------------------------------
+; Pvec Pvec -> Pvec
+; add 2 vectors together
+(define (vec+ v1 v2)
+  (pvec
+   (+ (pvec-x v1) (pvec-x v2))
+   (+ (pvec-y v1) (pvec-y v2))))
+
+; later on, add some other vector functions that will be useful, like computing the heading as an angle, computing it's magnitude, etc.
 ; Player KeyEvent -> Player
 (define (direct-ship p ke)
-  p)
+  (define vel (player-veloc p))
+  (define loc (player-locat p))
+  (match ke
+    ["left" (vec+ vel (pvec -1 0))]
+    ["right" (vec+ vel (pvec 1 0))]
+    ["up" (vec+ vel (pvec 0 1))]
+    ["down" (vec+ vel (pvec 0 -1))]
+    [_ p]))
 
 ; Player -> Player
 (define (fly-ship p)
-  (make-magnitude
-   ; what if we're flying straight up?
-   ; changing this to a physical vector instead of a polar number might work out much better for the acceleration model of the game
-   ; oh, boopo.
-   ; boopo, boopo!
-   (+ (magnitude p) (player-accel p))
-   (angle p)))
+  (define vel (player-veloc p))
+  (define loc (player-locat p))
+  ; - IN -
+  (struct-copy player p [locat (vec+ loc vel)]))
 
 ; -------------------------------------------------------------------------------------
 #| RENDERING |#
 ; -------------------------------------------------------------------------------------
 ; Player -> Image
-; if the player's location is a polar coord, we have to deconstruct into cartesian points
 (define (render-game p)
   (place-image
    (rotate (player-rotat p) SHIP)
-   (polar->cartes (player-locat p))
+   (pvec-x (player-locat p))
+   (pvec-y (player-locat p))
    BACKG))
-
-; Polar -> Number Number
-(define (polar->cartes num)
-  (values (round (* (magnitude num) (cos (angle num))))
-          (round (* (magnitude num) (sin (angle num))))))
