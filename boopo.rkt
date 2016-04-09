@@ -12,17 +12,15 @@
 ; A location can be either a singular point
 ; or the vector representing the difference between location and origin
 
-(struct player (veloc rotat locat) #:transparent)
+(struct player (veloc head locat) #:transparent)
 ; player = (player Integer Integer Polar)
-; in (player a r l)
+; in (player a h l)
 ; -- a is the player's velocity
-; -- r is the player's current rotation, used for determining direction and rendering
-;   positive is counter-clockwise and negative is clockwise
-;   is this really necessary? Since velocity is directed, isn't it redundant to
-;   mention direction twice?
+; -- h is the player's current heading, used for determining direction and rendering
+;    This is an accumulated value calculated from the player's location and velocity.
 ; -- l is the player's location, expressed as an angle and magnitude from the upper left
 
-(struct game (p t)) ; contains a player and the turret
+(struct game (p t) #:transparent) ; contains a player and the turret
 
 ; A turret could be:
 ; 1. a pvec, representing it's x- and y-coords.
@@ -38,17 +36,19 @@
 ; -------------------------------------------------------------------------------------
 (define WIDTH  720)
 (define HEIGHT 720)
-
+(define TURN-RATE (/ pi 6))
 ; -------------------------------------------------------------------------------------
 #| VISUAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
 (define BACKG (empty-scene WIDTH HEIGHT))
-(define SHIP (triangle 25 'solid 'thistle))
+;(define SHIP (triangle 25 'solid 'thistle))
+(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
 (define TURRET (circle 5 'solid 'orange))
+
 
 ; -------------------------------------------------------------------------------------
 #| INITIALIZATION |#
-; -------------------------------------------------------------------------------------
+; ------------------------------------------------------------------------------------
 ; -> Player
 ; the game's state, for now, is just a player
 (define (start)
@@ -80,13 +80,16 @@
    (+ (pvec-y v1) (pvec-y v2))))
 
 ; Pvec Pvec -> Rational
-; returns the heading of a line between two vector points
+; returns the heading of a line between two vector points in radians
 (define (heading v1 v2)
-  (define max_v (vec-max v1 v2))
-  (define min_v (vec-min v1 v2))
   ; - IN -
   ; take the inverse tangent of the difference between two points
-  (atan (vec- max_v min_v)))
+  (atan (/ (- (pvec-y v2) (pvec-y v1))
+           (- (pvec-x v2) (pvec-x v1)))))
+
+; Radians -> Degrees
+(define (rad->deg r)
+  (/ (* r 180) pi))
 
 ; Pvec Pvec -> Pvec
 (define (vec-max v1 v2)
@@ -120,14 +123,27 @@
 ; Player KeyEvent -> Player
 (define (direct-ship p ke)
   (define vel (player-veloc p))
-  (define loc (player-locat p))
-  (define rot (player-rotat p))
-  (match ke
-    ["left"  (player (vec+ vel (pvec -1 0)) (+ rot 10) loc)]
-    ["right" (player (vec+ vel (pvec 1 0))  (- rot 10) loc)]
-    ["up"    (player (vec+ vel (pvec 0 -1))  rot loc)]
-    ["down"  (player (vec+ vel (pvec 0 1)) rot loc)]
+  (define oloc (player-locat p))
+  (define nloc (player-head p))
+  (match ke ; you'll have to change the velocity
+    ; the velocity could be: an integer, represnting speed, which is then applied
+    ; to the vector representing the heading?
+    ; or: a vector representing speed, add (cos TURN-RATE) (sin TURN-RATE) when you turn
+    ["left"
+     (player (vec+ vel (pvec -1 0))
+             (update-nloc nloc vec+ (pvec (cos TURN-RATE) (sin TURN-RATE))) oloc)]
+    ["right"
+     (player (vec+ vel (pvec 1 0))
+             (update-nloc nloc vec- (pvec (cos TURN-RATE) (sin TURN-RATE))) oloc)]
+    ["up"
+     (player (vec+ vel (pvec 0 -1)) nloc oloc)]
+    ["down"
+     (player (vec+ vel (pvec 0 1)) nloc oloc)]
     [_ p]))
+
+; Pvec [Pvec -> Pvec] Pvec -> Pvec
+(define (update-nloc orig p-or-m new-vec)
+  (p-or-m orig new-vec))
 
 ; Player -> Player
 (define (fly-ship p)
@@ -142,7 +158,7 @@
 ; Player -> Image
 (define (render-game p)
   (place-image
-   (rotate (player-rotat p) SHIP)
+   (rotate (player-head p) SHIP)
    (pvec-x (player-locat p))
    (pvec-y (player-locat p))
    BACKG))
