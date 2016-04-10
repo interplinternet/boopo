@@ -45,7 +45,6 @@
 #| VISUAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
 (define BACKG (empty-scene WIDTH HEIGHT))
-;(define SHIP (triangle 25 'solid 'thistle))
 ;(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
 (define SHIP (triangle/sss 50 50 20 'solid 'thistle))
 (define TURRET (circle 5 'solid 'orange))
@@ -194,15 +193,7 @@
   (define x (pvec-x vec))
   (define y (pvec-y vec))
   (pvec x (- y)))
- #| (cond
-    [(and (positive? x) (positive? y))
-     (pvec x (- y))]
-    [(and (positive? x) (negative? y))
-     (pvec x (- y))]
-    [(and (negative? x) (negative? y))
-     (pvec x (- y))]
-    [(and (negative? x) (positive? y))
-     (pvec x (- y))])) |#
+ 
 ; -------------------------------------------------------------------------------------
 #| RENDERING |#
 ; -------------------------------------------------------------------------------------
