@@ -5,15 +5,15 @@
 <li><a href="#orgheadline1">1. Boopo's Escape</a></li>
 <li><a href="#orgheadline2">2. Current progress:</a></li>
 <li><a href="#orgheadline3">3. <span class="todo nilTODO">TODO</span> <code>[1/3]</code></a></li>
-<li><a href="#orgheadline8">4. Data</a>
+<li><a href="#orgheadline9">4. Data</a>
 <ul>
 <li><a href="#orgheadline4">4.1. Pvectors</a></li>
-<li><a href="#orgheadline6">4.2. Player</a>
+<li><a href="#orgheadline7">4.2. Player</a>
 <ul>
-<li><a href="#orgheadline5">4.2.1. Notes</a></li>
+<li><a href="#orgheadline6">4.2.1. Notes</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline7">4.3. Turret</a></li>
+<li><a href="#orgheadline8">4.3. Turret</a></li>
 </ul>
 </li>
 </ul>
@@ -34,7 +34,7 @@ A ship and turret can be rendered on the background.
 -   [ ] Add the turret
 -   [ ] Add turret tracking
 
-# Data<a id="orgheadline8"></a>
+# Data<a id="orgheadline9"></a>
 
 ## Pvectors<a id="orgheadline4"></a>
 
@@ -43,19 +43,22 @@ A 2-dimensional vector, `(pvector Integer Integer)` in `(pvector x y)` can repre
 -   **x:** the ship's velocity in the horizontal plane, or its horizontal distance from the origin
 -   **y:** the ship's velocity in the vertical plane, or its vertical distance from the origin
 
-## Player<a id="orgheadline6"></a>
+## Player<a id="orgheadline7"></a>
 
-Currently, a player is represented as a struct: `(player Pvector Natural Pvector)` in `(player v r l)`
+Currently, a player is represented as a struct: `(player Natural Pvector Pvector Natural)` in `(player m v l t)`
 
--   **v:** A Pvector representing the ship's velocity in x- and y-coords.
--   **r:** [0,360] represents the rotation of the ship, where 0 is facing right and 90 is facing up. Later on, this should an accumulated value representing the heading of the ship's velocity.
+-   **m:** A scalar number, the magnitude of the ship's pvector. This number is separated from the vector for convenience. It's used to scale the vector during movement.
+-   **v:** A Pvector representing the ship's velocity in x- and y-coords around a unit circle. This vector is then scaled by **m** to give the appropriate velociy.
 -   **l:** A Pvector representing the location of the ship as the distance from the origin, the upper left, of the screen.
+-   **t:** The number of turns around the circle in "n" radian units. Used for rendering the ship at the appropriate angle and for rotating the ship during play.
 
-### Notes<a id="orgheadline5"></a>
+### Notes<a id="orgheadline6"></a>
 
-The controls are still a little buggy. Left and right don't determine the *heading* of the ship's velocity, they alter the velocity itself directly. This means that pressing left and right sends you careening off in that direction, instead of just changing direction. It's kind of fun though. "Horizontal thrusters", really.
+1.  The controls are fine now, but previously:
 
-## Turret<a id="orgheadline7"></a>
+    -   The controls were a little buggy. Left and right didn't determine the *heading* of the ship's velocity, they alter the velocity itself directly. This means that pressing left and right sends you careening off in that direction, instead of just changing direction. It's kind of fun though. "Horizontal thrusters", really. Might be fun to look into this kind of movement more and polish it up for an alternative control scheme.
+
+## Turret<a id="orgheadline8"></a>
 
 The turret hasn't been implemented yet, here are some ideas:
 
