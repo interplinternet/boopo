@@ -36,15 +36,18 @@
 ; -------------------------------------------------------------------------------------
 (define WIDTH  720)
 (define HEIGHT 720)
-(define TURN-RATE (/ pi 6))
+(define TURN-RATE (/ pi 4))
+(define MAX-TURNS (/ (* 2 pi) TURN-RATE))
 (define MAX-SPEED 10)
+(define INIT-TURN 0)
 
 ; -------------------------------------------------------------------------------------
 #| VISUAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
 (define BACKG (empty-scene WIDTH HEIGHT))
 ;(define SHIP (triangle 25 'solid 'thistle))
-(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
+;(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
+(define SHIP (triangle/sss 50 50 20 'solid 'thistle))
 (define TURRET (circle 5 'solid 'orange))
 
 ; -------------------------------------------------------------------------------------
@@ -65,7 +68,7 @@
 
 ; -> Player
 (define (init-player)
-  (player 0 (pvec 0 0) (pvec 360 360) 0))
+  (player 0 (pvec 1 0) (pvec 360 360) INIT-TURN))
   ;(player 0 (pvec 0 0) (pvec (random WIDTH) (random HEIGHT))))
 
 ; -> Turret
@@ -78,7 +81,7 @@
 (define (sin~ n)
   (rationalize (sin n) .1))
 
-(define (cos~ n) 
+(define (cos~ n)
   (rationalize (cos n) .1))
 
 ; Pvec Pvec -> Pvec
@@ -149,23 +152,11 @@
     ; the velocity could be: an integer, represnting speed, which is then applied
     ; to the vector representing the heading?
     ; or: a vector representing speed, add (cos TURN-RATE) (sin TURN-RATE) when you turn
-    ["left" (move left (struct-copy player p [turns (modulo (add1 t) 12)]))]
-    ["right" (move right (struct-copy player p [turns (modulo (sub1 t) 12)]))]
-    ["up" ;(struct-copy player p [veloc (vec-scale vel (add1 s))] [magni (intrvl add1 s)])]
-     (struct-copy player p
-                  [veloc (vec+ vel (pvec 0 1))]
-                  [magni (intrvl add1 s)])]
-    #| (player (intrvl add1 s)
-             (vec+ vel (pvec 0 (sin~ (* TURN-RATE (add1 s)))))
-             loc)] |#
-    ["down"
-     (struct-copy player p
-                  [veloc (vec-scale vel (intrvl sub1 s))]
-                  [magni (intrvl sub1 s)])]
-    #| (player (intrvl sub1 s)
-             (vec- vel (pvec 0 (sin~ (* TURN-RATE (sub1 s)))))
-    loc)] |#
-    ["r" (player 0 (pvec 0 0) (pvec 360 360) 0)]
+    ["left" (move (struct-copy player p [turns (modulo (add1 t) MAX-TURNS)]))]
+    ["right" (move (struct-copy player p [turns (modulo (sub1 t) MAX-TURNS)]))]
+    ["up"  (struct-copy player p [magni (intrvl add1 s)])]
+    ["down" (struct-copy player p [magni (intrvl sub1 s)])]
+    ["r" (player 0 (pvec 1 0) (pvec 360 360) INIT-TURN)]
     [_ p])
    (game-t g)))
 
@@ -176,26 +167,12 @@
     [(> new MAX-SPEED) MAX-SPEED]
     [else new]))
 
-(define (move dir pl)
+(define (move pl)
   (define s (player-magni pl))
   (define loc (player-locat pl))
   (define t (player-turns pl))
- #| (player s
-          (dir (player-veloc pl) t s)
-          loc
-  t)) |#
-  (struct-copy player pl [veloc (pvec (cos~ (* TURN-RATE t)) (sin~ (* TURN-RATE t)))]))
-
-(define (left vel turns s)
-  ; this is broken!
-  ;(vec- vel (vec-scale (pvec (cos~ TURN-RATE) (sin~ TURN-RATE)) s)))
-  (vec-scale (pvec (cos~ (* TURN-RATE turns))
-                   (sin~ (* TURN-RATE turns))) s))
-
-(define (right vel turns s)
-  ;(vec+ vel (vec-scale (pvec (cos~ TURN-RATE) (sin~ TURN-RATE)) s)))
-  (vec-scale (pvec (cos~ (* TURN-RATE turns))
-                   (sin~ (* TURN-RATE turns))) s))
+  (struct-copy player pl [veloc (pvec (cos~ (* TURN-RATE t))
+                                      (sin~ (* TURN-RATE t)))]))
 
 ; Game -> Game
 (define (fly-ship g)
@@ -206,10 +183,26 @@
   ; - IN -
   (game
    (if (and (<= 0 (pvec-x loc) WIDTH) (<= 0 (pvec-y loc) HEIGHT))
-       (struct-copy player p [locat (vec- loc vel)])
+       (struct-copy player p
+                    [locat (vec+ loc (rotate-quad (vec-scale vel s)))])
        p)
    (game-t g)))
-
+; Pvec -> Pvec
+; rotates the quadrant a vector is in in accordance with how racket interprets
+; negative and positive movement.
+(define (rotate-quad vec)
+  (define x (pvec-x vec))
+  (define y (pvec-y vec))
+  (pvec x (- y)))
+ #| (cond
+    [(and (positive? x) (positive? y))
+     (pvec x (- y))]
+    [(and (positive? x) (negative? y))
+     (pvec x (- y))]
+    [(and (negative? x) (negative? y))
+     (pvec x (- y))]
+    [(and (negative? x) (positive? y))
+     (pvec x (- y))])) |#
 ; -------------------------------------------------------------------------------------
 #| RENDERING |#
 ; -------------------------------------------------------------------------------------
@@ -221,7 +214,7 @@
             (rationalize (heading (vec+ (player-veloc p) (player-locat p))
                                   (player-locat p))
    .1)) SHIP) |#
-   (rotate (rationalize (radians->degrees (* TURN-RATE (player-turns p))) .5) SHIP)
+   (rotate (rationalize (+ 90 (* (radians->degrees TURN-RATE) (player-turns p))) .5) SHIP)
    (pvec-x (player-locat p))
    (pvec-y (player-locat p))
    BACKG))
