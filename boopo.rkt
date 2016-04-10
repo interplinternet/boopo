@@ -47,7 +47,7 @@
 (define BACKG (empty-scene WIDTH HEIGHT))
 ;(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
 (define SHIP (triangle/sss 50 50 20 'solid 'thistle))
-(define TURRET (circle 5 'solid 'orange))
+(define TURRET (circle 15 'solid 'orange))
 
 ; -------------------------------------------------------------------------------------
 #| INITIALIZATION |#
@@ -56,8 +56,8 @@
 ; the game's state, for now, is just a player
 (define (start)
   (big-bang (init-game)
-            [on-key direct-ship]
-            [on-tick fly-ship]
+            [on-key direct-game]
+            [on-tick update-game]
             [to-draw render-game]
             [state #t]))
 
@@ -83,12 +83,19 @@
 (define (cos~ n)
   (rationalize (cos n) .1))
 
+;;----------VECTORS----------;;
 ; Pvec Pvec -> Pvec
 ; add 2 vectors together
 (define (vec+ v1 v2)
   (pvec
    (rationalize (+ (pvec-x v1) (pvec-x v2)) .1)
    (rationalize (+ (pvec-y v1) (pvec-y v2)) .1)))
+
+; Pvec Pvec -> Pvec
+(define (vec- v1 v2)
+  (pvec
+   (rationalize (- (pvec-x v1) (pvec-x v2)) .1)
+   (rationalize (- (pvec-y v1) (pvec-y v2)) .1)))
 
 ; Pvec Number -> Pvec
 ; scales a vector by a scalar
@@ -98,66 +105,62 @@
 
 ; Pvec Pvec -> Rational
 ; returns the heading of a line between two vector points in radians
+; by taking the inverse tangent of the difference between two points
 (define (heading v1 v2)
-  ; take the inverse tangent of the difference between two points
   (define dy (- (pvec-y v2) (pvec-y v1)))
   (define dx (- (pvec-x v2) (pvec-x v1)))
   (if (and (zero? dy) (zero? dx))
       0
       (rationalize (atan (- (pvec-y v2) (pvec-y v1))
                          (- (pvec-x v2) (pvec-x v1))) .1)))
-  #| (atan (/ (- (pvec-y v2) (pvec-y v1))
-           (- (pvec-x v2) (pvec-x v1))))) |#
 
-; Pvec Pvec -> Pvec
-(define (vec-max v1 v2)
-  (define origin (pvec 0 0))
-  (if (>= (vec-mag v1 origin)
-          (vec-mag v2 origin))
-      v1
-      v2))
-
-; Pvec Pvec -> Pvec
-(define (vec-min v1 v2)
-  (define origin (pvec 0 0))
-  (if (< (vec-mag v1 origin)
-         (vec-mag v2 origin))
-      v1
-      v2))
-
-; Pvec Pvec -> Pvec
-(define (vec- v1 v2)
-  (pvec
-   (rationalize (- (pvec-x v1) (pvec-x v2)) .1)
-   (rationalize (- (pvec-y v1) (pvec-y v2)) .1)))
-
-; Pvec Pvec -> Number
+; Pvec [Pvec 0 0] -> Number
 ; b/c we represent points as 2D vectors as well,
 ; our magnitude must take this into account
-(define (vec-mag v1 v2)
-  (sqrt (+ (sqr (- (pvec-x v1) (pvec-x v2)))
-           (sqr (- (pvec-y v1) (pvec-y v2))))))
+(define (vec-mag v1 [base (pvec 0 0)])
+  (sqrt (+ (sqr (- (pvec-x v1) (pvec-x base)))
+           (sqr (- (pvec-y v1) (pvec-y base))))))
 
-; later on, add some other vector functions that will be useful, like computing the heading as an angle, computing it's magnitude, etc.
+; Pvec Pvec -> Pvec
+; returns the largest of the two vectors
+(define (vec-max v1 v2)
+  (if (>= (vec-mag v1)
+          (vec-mag v2))
+      v1
+      v2))
+
+; Pvec Pvec -> Pvec
+; returns the smallest of two vectors
+(define (vec-min v1 v2)
+  (if (< (vec-mag v1)
+         (vec-mag v2))
+      v1
+      v2))
+;;----------GAME----------;;
 ; Game KeyEvent -> Game
-(define (direct-ship g ke)
+(define (direct-game g ke)
   (define p (game-p g))
-  (define vel (player-veloc p))
-  (define loc (player-locat p))
-  (define s (player-magni p))
-  (define t (player-turns p))
   (game
-   (match ke ; you'll have to change the velocity
-    ; the velocity could be: an integer, represnting speed, which is then applied
-    ; to the vector representing the heading?
-    ; or: a vector representing speed, add (cos TURN-RATE) (sin TURN-RATE) when you turn
-    ["left" (move (struct-copy player p [turns (modulo (add1 t) MAX-TURNS)]))]
-    ["right" (move (struct-copy player p [turns (modulo (sub1 t) MAX-TURNS)]))]
-    ["up"  (struct-copy player p [magni (intrvl add1 s)])]
-    ["down" (struct-copy player p [magni (intrvl sub1 s)])]
-    ["r" (player 0 (pvec 1 0) (pvec 360 360) INIT-TURN)]
-    [_ p])
-   (game-t g)))
+   (direct-ship p ke)
+   (direct-turret (game-t g))))
+
+; Player -> Player
+(define (direct-ship pl ke)
+  (define s (player-magni pl))
+  (define t (player-turns pl))
+  (match ke
+    ["left"  (move pl (modulo (add1 t) MAX-TURNS))]
+    ["right" (move pl (modulo (sub1 t) MAX-TURNS))]
+    ["up"    (struct-copy player pl [magni (intrvl add1 s)])]
+    ["down"  (struct-copy player pl [magni (intrvl sub1 s)])]
+    ["r"     (player 0 (pvec 1 0) (pvec 360 360) INIT-TURN)]
+    [_ pl]))
+
+; Turret -> Turret
+; for now, there is nothing you can do with the turret. If it turns out that there's never
+; anything to do with it, I'll just remove this.
+(define (direct-turret tr)
+  tr)
 
 (define (intrvl proc n)
   (define new (proc n))
@@ -166,49 +169,59 @@
     [(> new MAX-SPEED) MAX-SPEED]
     [else new]))
 
-(define (move pl)
-  (define s (player-magni pl))
-  (define loc (player-locat pl))
-  (define t (player-turns pl))
-  (struct-copy player pl [veloc (pvec (cos~ (* TURN-RATE t))
-                                      (sin~ (* TURN-RATE t)))]))
+; Player Number -> Player
+(define (move pl turn#)
+  (struct-copy player pl
+               [veloc (pvec (cos~ (* TURN-RATE turn#))
+                            (sin~ (* TURN-RATE turn#)))]
+               [turns turn#]))
 
 ; Game -> Game
-(define (fly-ship g)
-  (define p (game-p g))
-  (define vel (player-veloc p))
-  (define loc (player-locat p))
-  (define s (player-magni p))
+(define (update-game g)
+  (game (fly-ship (game-p g))
+        (rotate-turret (game-t g))))
+
+; Player -> Player
+(define (fly-ship pl)
+  (define vel     (player-veloc pl))
+  (define loc     (player-locat pl))
+  (define s       (player-magni pl))
+  (define new-loc (vec+ loc (rotate-quad (vec-scale vel s))))
   ; - IN -
-  (game
-   (if (and (<= 0 (pvec-x loc) WIDTH) (<= 0 (pvec-y loc) HEIGHT))
-       (struct-copy player p
-                    [locat (vec+ loc (rotate-quad (vec-scale vel s)))])
-       p)
-   (game-t g)))
+  (if (and (<= 0 (pvec-x new-loc) WIDTH) (<= 0 (pvec-y new-loc) HEIGHT))
+      (struct-copy player pl [locat new-loc])
+      pl))
+
+; Turret -> Turret
+(define (rotate-turret tr)
+  tr)
+
 ; Pvec -> Pvec
 ; rotates the quadrant a vector is in in accordance with how racket interprets
 ; negative and positive movement.
 (define (rotate-quad vec)
-  (define x (pvec-x vec))
-  (define y (pvec-y vec))
-  (pvec x (- y)))
- 
+  (match vec
+    [(pvec x y) (pvec x (- y))]))
+
 ; -------------------------------------------------------------------------------------
 #| RENDERING |#
 ; -------------------------------------------------------------------------------------
 ; Player -> Image
 (define (render-game g)
-  (define p (game-p g))
+  (render-ship (game-p g)
+               (render-turret (game-t g) BACKG)))
+
+; Player Image -> Image
+(define (render-ship pl im)
   (place-image
-   #| (rotate (radians->degrees
-            (rationalize (heading (vec+ (player-veloc p) (player-locat p))
-                                  (player-locat p))
-   .1)) SHIP) |#
-   (rotate (rationalize (+ 90 (* (radians->degrees TURN-RATE) (player-turns p))) .5) SHIP)
-   (pvec-x (player-locat p))
-   (pvec-y (player-locat p))
-   BACKG))
+   (rotate (rationalize (+ 90 (* (radians->degrees TURN-RATE) (player-turns pl))) .5) SHIP)
+   (pvec-x (player-locat pl))
+   (pvec-y (player-locat pl))
+   im))
+
+; Turret Image -> Image
+(define (render-turret tr im)
+  (place-image TURRET (pvec-x tr) (pvec-y tr) im))
 
 (define start-game
   (thread start))
