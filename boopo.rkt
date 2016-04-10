@@ -12,7 +12,7 @@
 ; A location can be either a singular point
 ; or the vector representing the difference between location and origin
 
-(struct player (magni veloc locat) #:transparent)
+(struct player (magni veloc locat turns) #:transparent)
 ; player = (player Integer Integer Polar)
 ; in (player a v l)
 ; -- a is the magnitude of the player's velocity
@@ -28,11 +28,8 @@
 ; -------------------------------------------------------------------------------------
 #| DATA EXAMPLES |#
 ; -------------------------------------------------------------------------------------
-(define ex-p ; a player moving at 0,1 velocity, 0° rotation, 100,100 units from origin
-  (player 1 (pvec 0 1) (pvec 100 100)))
-
-(define ex-p2
-  (player 100 (pvec 0 1) (pvec 360 360)))
+(define ex-p
+  (player 10 (pvec 0 10) (pvec 360 360) 0))
 
 ; -------------------------------------------------------------------------------------
 #| PHYSICAL CONSTANTS |#
@@ -68,7 +65,8 @@
 
 ; -> Player
 (define (init-player)
-  (player 0 (pvec 0 0) (pvec (random WIDTH) (random HEIGHT))))
+  (player 0 (pvec 0 0) (pvec 360 360) 0))
+  ;(player 0 (pvec 0 0) (pvec (random WIDTH) (random HEIGHT))))
 
 ; -> Turret
 (define (init-turret)
@@ -78,28 +76,36 @@
 #| LOGIC |#
 ; -------------------------------------------------------------------------------------
 (define (sin~ n)
-  (round (sin n)))
+  (rationalize (sin n) .1))
 
-(define (cos~ n)
-  (round (cos n)))
+(define (cos~ n) 
+  (rationalize (cos n) .1))
 
 ; Pvec Pvec -> Pvec
 ; add 2 vectors together
 (define (vec+ v1 v2)
   (pvec
-   (+ (pvec-x v1) (pvec-x v2))
-   (+ (pvec-y v1) (pvec-y v2))))
+   (rationalize (+ (pvec-x v1) (pvec-x v2)) .1)
+   (rationalize (+ (pvec-y v1) (pvec-y v2)) .1)))
+
+; Pvec Number -> Pvec
+; scales a vector by a scalar
+(define (vec-scale v s)
+  (pvec (rationalize (* (pvec-x v) s) .1)
+        (rationalize (* (pvec-y v) s) .1)))
 
 ; Pvec Pvec -> Rational
 ; returns the heading of a line between two vector points in radians
 (define (heading v1 v2)
-    ; take the inverse tangent of the difference between two points
-  (atan (/ (- (pvec-y v2) (pvec-y v1))
-           (- (pvec-x v2) (pvec-x v1)))))
-
-; Radians -> Degrees
-(define (rad->deg r)
-  (/ (* r 180) pi))
+  ; take the inverse tangent of the difference between two points
+  (define dy (- (pvec-y v2) (pvec-y v1)))
+  (define dx (- (pvec-x v2) (pvec-x v1)))
+  (if (and (zero? dy) (zero? dx))
+      0
+      (rationalize (atan (- (pvec-y v2) (pvec-y v1))
+                         (- (pvec-x v2) (pvec-x v1))) .1)))
+  #| (atan (/ (- (pvec-y v2) (pvec-y v1))
+           (- (pvec-x v2) (pvec-x v1))))) |#
 
 ; Pvec Pvec -> Pvec
 (define (vec-max v1 v2)
@@ -120,11 +126,12 @@
 ; Pvec Pvec -> Pvec
 (define (vec- v1 v2)
   (pvec
-   (- (pvec-x v1) (pvec-x v2))
-   (- (pvec-y v1) (pvec-y v2))))
+   (rationalize (- (pvec-x v1) (pvec-x v2)) .1)
+   (rationalize (- (pvec-y v1) (pvec-y v2)) .1)))
 
 ; Pvec Pvec -> Number
-; b/c we represent points as 2D vectors as well, our magnitude must take this into account
+; b/c we represent points as 2D vectors as well,
+; our magnitude must take this into account
 (define (vec-mag v1 v2)
   (sqrt (+ (sqr (- (pvec-x v1) (pvec-x v2)))
            (sqr (- (pvec-y v1) (pvec-y v2))))))
@@ -136,21 +143,29 @@
   (define vel (player-veloc p))
   (define loc (player-locat p))
   (define s (player-magni p))
+  (define t (player-turns p))
   (game
    (match ke ; you'll have to change the velocity
     ; the velocity could be: an integer, represnting speed, which is then applied
     ; to the vector representing the heading?
     ; or: a vector representing speed, add (cos TURN-RATE) (sin TURN-RATE) when you turn
-    ["left" (move left p)]
-    ["right" (move right p)]
-    ["up"
-     (player (intrvl add1 s)
+    ["left" (move left (struct-copy player p [turns (modulo (add1 t) 12)]))]
+    ["right" (move right (struct-copy player p [turns (modulo (sub1 t) 12)]))]
+    ["up" ;(struct-copy player p [veloc (vec-scale vel (add1 s))] [magni (intrvl add1 s)])]
+     (struct-copy player p
+                  [veloc (vec+ vel (pvec 0 1))]
+                  [magni (intrvl add1 s)])]
+    #| (player (intrvl add1 s)
              (vec+ vel (pvec 0 (sin~ (* TURN-RATE (add1 s)))))
-             loc)]
+             loc)] |#
     ["down"
-     (player (intrvl sub1 s)
+     (struct-copy player p
+                  [veloc (vec-scale vel (intrvl sub1 s))]
+                  [magni (intrvl sub1 s)])]
+    #| (player (intrvl sub1 s)
              (vec- vel (pvec 0 (sin~ (* TURN-RATE (sub1 s)))))
-             loc)]
+    loc)] |#
+    ["r" (player 0 (pvec 0 0) (pvec 360 360) 0)]
     [_ p])
    (game-t g)))
 
@@ -164,31 +179,35 @@
 (define (move dir pl)
   (define s (player-magni pl))
   (define loc (player-locat pl))
-  (player s
-          (dir (player-veloc pl) s)
-          loc))
+  (define t (player-turns pl))
+ #| (player s
+          (dir (player-veloc pl) t s)
+          loc
+  t)) |#
+  (struct-copy player pl [veloc (pvec (cos~ (* TURN-RATE t)) (sin~ (* TURN-RATE t)))]))
 
-(define (left vel s)
+(define (left vel turns s)
   ; this is broken!
-  (vec- vel (pvec (* s (cos~ (* TURN-RATE s)))
-                  (* s (sin~ (* TURN-RATE s))))))
+  ;(vec- vel (vec-scale (pvec (cos~ TURN-RATE) (sin~ TURN-RATE)) s)))
+  (vec-scale (pvec (cos~ (* TURN-RATE turns))
+                   (sin~ (* TURN-RATE turns))) s))
 
-(define (right vel s)
-  (vec+ vel (pvec (* s (cos~ (* TURN-RATE s)))
-                  (* s (sin~ (* TURN-RATE s))))))
-
-; Pvec [Pvec -> Pvec] Pvec -> Pvec
-(define (update-nloc orig p-or-m new-vec)
-  (p-or-m orig new-vec))
+(define (right vel turns s)
+  ;(vec+ vel (vec-scale (pvec (cos~ TURN-RATE) (sin~ TURN-RATE)) s)))
+  (vec-scale (pvec (cos~ (* TURN-RATE turns))
+                   (sin~ (* TURN-RATE turns))) s))
 
 ; Game -> Game
 (define (fly-ship g)
   (define p (game-p g))
   (define vel (player-veloc p))
   (define loc (player-locat p))
+  (define s (player-magni p))
   ; - IN -
   (game
-   (struct-copy player p [locat (vec+ loc vel)])
+   (if (and (<= 0 (pvec-x loc) WIDTH) (<= 0 (pvec-y loc) HEIGHT))
+       (struct-copy player p [locat (vec- loc vel)])
+       p)
    (game-t g)))
 
 ; -------------------------------------------------------------------------------------
@@ -198,7 +217,14 @@
 (define (render-game g)
   (define p (game-p g))
   (place-image
-   (rotate (rad->deg (heading (player-veloc p) (player-locat p))) SHIP)
+   #| (rotate (radians->degrees
+            (rationalize (heading (vec+ (player-veloc p) (player-locat p))
+                                  (player-locat p))
+   .1)) SHIP) |#
+   (rotate (rationalize (radians->degrees (* TURN-RATE (player-turns p))) .5) SHIP)
    (pvec-x (player-locat p))
    (pvec-y (player-locat p))
    BACKG))
+
+(define start-game
+  (thread start))
