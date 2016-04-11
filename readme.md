@@ -4,7 +4,7 @@
 <ul>
 <li><a href="#orgheadline1">1. Boopo's Escape</a></li>
 <li><a href="#orgheadline2">2. Current progress:</a></li>
-<li><a href="#orgheadline3">3. <span class="todo nilTODO">TODO</span> <code>[1/3]</code></a></li>
+<li><a href="#orgheadline3">3. <span class="todo nilTODO">TODO</span> <code>[1/4]</code></a></li>
 <li><a href="#orgheadline9">4. Data</a>
 <ul>
 <li><a href="#orgheadline4">4.1. Pvectors</a></li>
@@ -26,13 +26,14 @@ This is a small, simple project. You fly a spaceship from one end of the screen 
 
 # Current progress:<a id="orgheadline2"></a>
 
-A ship and turret can be rendered on the background.
+A ship and turret can be rendered on the background. You can fly the ship around the screen. You turn in increments of π/6, but this can be modified to any arbitrary radian unit.
 
-# TODO <code>[1/3]</code><a id="orgheadline3"></a>
+# TODO <code>[1/4]</code><a id="orgheadline3"></a>
 
--   [X] Determine primary data structure
--   [ ] Add the turret
--   [ ] Add turret tracking
+-   [X] Determine primary data structure.
+-   [ ] Implement simple quadtree for collision-checking between entities (projectiles, turret, ship).
+-   [ ] Add the turret.
+-   [ ] Add turret tracking.
 
 # Data<a id="orgheadline9"></a>
 
