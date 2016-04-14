@@ -13,7 +13,9 @@
 ;-------------------------------------------------------------------------------------
 (define DEPTH 3)
 (define BOUNDS 4) ; width and height, since we use a square
-
+(define MAX 3)
+; no more than thre objects per node.
+; reason: the game only has a turret, a ship, and a projectile.
 ;-------------------------------------------------------------------------------------
 #| EXAMPLES |#
 ;-------------------------------------------------------------------------------------
@@ -79,6 +81,15 @@
 (define empty-tree (make-empty-tree (posn 0 0) 2 2))
 (define root3 (node (posn 0 0) '() '()))
 
+; Node Number -> Node
+; splits a node with dimension "bounds" into a node with 4 subnodes
+(define (split a-node bounds)
+  (define base-coords (node-coord a-node))
+  (define new-quads (make-squares (posn-x base-coords) (posn-y base-coords)
+                                  (/ bounds 2)))
+  ; - IN -
+  (struct-copy node a-node
+               [children (map (λ (child) (node child '() '())) new-quads)]))
 #|
 Entity := Ship
         | Turret
@@ -111,20 +122,55 @@ Entity := Ship
   ; For example, given a child-coord of (posn 0 0), bounds of 1, a ship centered at
   ; (posn 1 1/2), the ship is placed at index 0 in the upper left.
   ; It occupies the edge between 0 and 1 index.
-  (posn<= coords location (posn (+ (posn-x coords) bounds)
+  (posn< coords location (posn (+ (posn-x coords) bounds)
                                 (+ (posn-y coords) bounds))))
 
 ; [Listof Posn] -> Boolean
-  (define (posn<= . coords)
-    (and (apply <= (map posn-x coords))
-         (apply <= (map posn-y coords))))
+; gives false if the ship is "on the line", b/c it must does not fit in any particular quad.
+  (define (posn< . coords)
+    (and (apply < (map posn-x coords))
+         (apply < (map posn-y coords))))
 
+; Node Number Entity -> Node
+; Problem: insert an entity into the appropriate subnode.
+; Determine the quadrant index it belongs to. If it doesn't belong to any quadrant,
+; place in the root node. If the indexed node it belongs to doesn't have room, split
+; and place in the appropriately indexed subnode.
+; Trivial: All subnodes are empty. Insert into the indexed node.
+; Generation: The subnode is full, split and recurse.
+; Termination: Terminates by splitting a node, which must be empty by definition,
+; and then inserting the entity into it.
+(define (insert-node tree bounds entity)
+  (define children (node-children tree))
+  (cond
+    [(empty? children) ; a node can have no children yet
+     (define new-tree (split tree bounds))
+     (insert-node new-tree bounds entity)]
+    [(cons? children)
+     (define index (get-index tree bounds entity))
+     (cond
+       [(false? index)
+        (node (node-coord tree)
+              (cons entity (node-content tree))
+              children)]
+       [else
+        (define candidate (list-ref children index))
+        (struct-copy node tree ; wow this is messy!
+                     [children
+                      (list-set children index
+                                (if (< (length (node-content candidate)) MAX)
+                                    (node (node-coord candidate)
+                                          (cons entity (node-content candidate))
+                                          (node-children candidate))
+                                    (insert-node candidate (/ bounds 2) entity)))])])]))
 ; Posn Node -> [Maybe Any]
 ; Question: Do we retrieve the first node in which the coordinate exists,
 ; or the last? (i.e., the largest possible area or the smallest? If the coord is 0,0
 ; then we could be retrieving the entire screen, OR an infinitesimaly small part
-; in the upper left corner). We might need to take dimension into account as well.
+; in the upper left corner). Then we might need to take dimension into account as well
 ; Dimension is related to depth: Where max bounds is "B" and depth is "n", B^1/n.
+; Answer: We retrieve the last possible node. Now we don't need to worry about
+; dimension, as we only split the tree to put new objects in.
 (define (retrieve-node coords tree)
   ; [Listof Node] -> Any
   (define (search-in subtree)
@@ -141,7 +187,7 @@ Entity := Ship
      ; depth-first searching for nodes
      (search-in (node-children tree))]
     [(empty? (node-children tree)) #f]))
-
+#|
 ; Content Posn Node -> Node
 ; As a prototype, it's fine for this function to assume that we already have the coords
 ; of the appropriate node. See above for problems.
@@ -157,11 +203,8 @@ Entity := Ship
      (node (node-coord tree) (node-content tree)
            (sub-insert (node-children tree)))]
     [else tree]))
-
+|#
 ; Posn Posn -> Boolean
 (define (posn=? p1 p2)
   (and (= (posn-x p1) (posn-x p2))
        (= (posn-y p1) (posn-y p2))))
-
-(define (build-lazy n proc)
-  (build-list n (λ (i) (delay (proc i)))))
