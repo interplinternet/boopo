@@ -77,7 +77,48 @@
         (posn (+ x dimension) (+ y dimension))))
 
 (define empty-tree (make-empty-tree (posn 0 0) 2 2))
-(define root (node (posn 0 0) '() '()))
+(define root3 (node (posn 0 0) '() '()))
+
+#|
+Entity := Ship
+        | Turret
+        | Projectile
+|#
+; Node Number Entity -> [Maybe Number]
+; consumes a tree, the dimension at that level,
+; and returns the index of the quadrant it belongs in.
+; Assumes an already split node. #f if it cannot fit.
+; From left->right, top->bottom, 0->3
+(define (get-index tree bounds location)
+  (define quadrants (node-children tree))
+  ; [Listof Node] Number -> Node
+  ; the accumulator represents the index of the node being investigated.
+  (define (index/a subquads index)
+    (cond
+      [(empty? subquads) #f]
+      [else
+       (if (fits? location (first subquads) bounds)
+           index
+           (index/a (rest subquads) (add1 index)))]))
+    ; - IN -
+    (index/a quadrants 0))
+
+; Entity Node Number -> Boolean
+(define (fits? location child bounds)
+  (define coords (node-coord child))
+  ; currently, this only compares the central coordinates of the entity
+  ; and doesn't take it's dimensions into account.
+  ; For example, given a child-coord of (posn 0 0), bounds of 1, a ship centered at
+  ; (posn 1 1/2), the ship is placed at index 0 in the upper left.
+  ; It occupies the edge between 0 and 1 index.
+  (posn<= coords location (posn (+ (posn-x coords) bounds)
+                                (+ (posn-y coords) bounds))))
+
+; [Listof Posn] -> Boolean
+  (define (posn<= . coords)
+    (and (apply <= (map posn-x coords))
+         (apply <= (map posn-y coords))))
+
 ; Posn Node -> [Maybe Any]
 ; Question: Do we retrieve the first node in which the coordinate exists,
 ; or the last? (i.e., the largest possible area or the smallest? If the coord is 0,0
