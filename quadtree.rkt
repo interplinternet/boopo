@@ -140,29 +140,40 @@ Entity := Ship
 ; Generation: The subnode is full, split and recurse.
 ; Termination: Terminates by splitting a node, which must be empty by definition,
 ; and then inserting the entity into it.
+
+; Caveat: If the entity does not fit into any particular quadrant, the subnodes are still created
+; but the entity still sits at the root node. This complicates retrieval,
+; b/c now we have two potential locations for an entity.
 (define (insert-node tree bounds entity)
-  (define children (node-children tree))
+  (define child* (node-children tree))
+
+  ; [Listof Node] -> [Listof Node]
+  (define (update-child child entity)
+    (cond
+      [(< (length (node-content child)) MAX)
+       (node (node-coord child)
+             (cons entity (node-content child))
+             (node-children child))]
+      [else
+       (insert-node child (/ bounds 2) entity)]))
+  ; - IN -
   (cond
-    [(empty? children) ; a node can have no children yet
+    ; maybe we should make the index the primary data here, to avoid needless splitting.
+    [(empty? child*) ; a node can have no children yet
      (define new-tree (split tree bounds))
      (insert-node new-tree bounds entity)]
-    [(cons? children)
+    [(cons? child*)
      (define index (get-index tree bounds entity))
      (cond
        [(false? index)
         (node (node-coord tree)
               (cons entity (node-content tree))
-              children)]
+              child*)]
        [else
-        (define candidate (list-ref children index))
         (struct-copy node tree ; wow this is messy!
                      [children
-                      (list-set children index
-                                (if (< (length (node-content candidate)) MAX)
-                                    (node (node-coord candidate)
-                                          (cons entity (node-content candidate))
-                                          (node-children candidate))
-                                    (insert-node candidate (/ bounds 2) entity)))])])]))
+                      (list-update child* index
+                                (λ (child) (update-child child entity)))])])]))
 ; Posn Node -> [Maybe Any]
 ; Question: Do we retrieve the first node in which the coordinate exists,
 ; or the last? (i.e., the largest possible area or the smallest? If the coord is 0,0
