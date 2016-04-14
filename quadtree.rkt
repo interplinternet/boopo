@@ -43,20 +43,23 @@
 ; Node := [List [List Number Number] [Listof Node]]
 ; Posn Number Number -> Quadtree
 ; Depth represents levels past the root node. A depth of 0 is just the root node.
+#| We could make only a single node, and then split when there are objects or
+ make the entire empty tree at once and then pass it around and insert/retrieve
+ objects as needed by copying the data structure. |#
 (define (make-empty-tree coords dimension depth)
   ; [Listof [List Number Number]] -> Node
   ; this could be inlined, but having it separate makes it a little easier
   ; to understand what it does.
   (define (make-sub-trees mid lo-sqr)
-    (map (λ (a-sqr) (make-empty-tree a-sqr mid (sub1 depth)))
-         lo-sqr))
+    (filter-map (λ (a-sqr) (and (not (empty? a-sqr))
+                                (make-empty-tree a-sqr mid (sub1 depth))))
+                lo-sqr))
   ; - IN -
   (cond
     [(zero? depth) (node coords '() '())]
     [else (define mid (/ dimension 2))
           (define new-squares (make-squares (posn-x coords) (posn-y coords) mid))
-          (define subtrees (filter (λ (i) (not (empty? i)))
-                                   (make-sub-trees mid new-squares)))
+          (define subtrees (make-sub-trees mid new-squares))
           ; - IN -
     (node coords '() subtrees)]))
 
@@ -74,12 +77,13 @@
         (posn (+ x dimension) (+ y dimension))))
 
 (define empty-tree (make-empty-tree (posn 0 0) 2 2))
-
+(define root (node (posn 0 0) '() '()))
 ; Posn Node -> [Maybe Any]
 ; Question: Do we retrieve the first node in which the coordinate exists,
 ; or the last? (i.e., the largest possible area or the smallest? If the coord is 0,0
 ; then we could be retrieving the entire screen, OR an infinitesimaly small part
 ; in the upper left corner). We might need to take dimension into account as well.
+; Dimension is related to depth: Where max bounds is "B" and depth is "n", B^1/n.
 (define (retrieve-node coords tree)
   ; [Listof Node] -> Any
   (define (search-in subtree)
@@ -88,6 +92,7 @@
       [else
        (define candidate (retrieve-node coords (first subtree)))
        (if candidate candidate (search-in (rest subtree)))]))
+  ; - IN -
   (cond
     [(posn=? coords (node-coord tree)) (node-content tree)]
     [(cons? (node-children tree))
