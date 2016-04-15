@@ -35,6 +35,24 @@
 ;-------------------------------------------------------------------------------------
 #| LOGIC |#
 ;-------------------------------------------------------------------------------------
+
+;----------POSNS----------
+; [Listof Posn] -> Boolean
+; gives false if the ship is "on the line", b/c it must does not fit in any particular quad
+(define (posn-oper oper coords)
+  (and (apply oper (map posn-x coords))
+       (apply oper (map posn-y coords))))
+
+(define (posn=? . posns)
+  (posn-oper = posns))
+
+(define (posn< . coords)
+  (posn-oper < coords))
+
+(define (posn> . coords)
+  (posn-oper > coords))
+
+;----------QUADTREE----------
 ; for easy prototyping, we use lists to represent the tree. The nodes contain
 ; nothing except for their coordinates and their children.
 
@@ -47,7 +65,17 @@
 ; Depth represents levels past the root node. A depth of 0 is just the root node.
 #| We could make only a single node, and then split when there are objects or
  make the entire empty tree at once and then pass it around and insert/retrieve
- objects as needed by copying the data structure. |#
+ objects as needed by copying the data structure.
+
+Maybe we could combine this with the root-and-split approach?
+Each level is wrapped in a delay, then evaluated as necessary. Every time we
+need to recreate the tree (as entities move), we copy every element in the tree and
+update only those which have been forced already, because unforced levels
+could not have been changed.
+
+i.e., we traverse the tree and update it as we move along until we hit a delayed evaluation
+and then we copy it over. We "split" the tree by forcing the next level. Branches which
+no longer contain entities are pruned?|#
 (define (make-empty-tree coords dimension depth)
   ; [Listof [List Number Number]] -> Node
   ; this could be inlined, but having it separate makes it a little easier
@@ -101,21 +129,24 @@ Entity := Ship
 ; Assumes an already split node. #f if it cannot fit.
 ; From left->right, top->bottom, 0->3
 (define (get-index tree bounds location)
-  (define quadrants (node-children tree))
+  (define quadrants
+    (if (empty? (node-children tree))
+        (node-children (split tree bounds))
+        (node-children tree)))
   ; [Listof Node] Number -> Node
   ; the accumulator represents the index of the node being investigated.
   (define (index/a subquads index)
     (cond
       [(empty? subquads) #f]
       [else
-       (if (fits? location (first subquads) bounds)
+       (if (fits? (first subquads) location (/ bounds 2))
            index
            (index/a (rest subquads) (add1 index)))]))
-    ; - IN -
-    (index/a quadrants 0))
+  ; - IN -
+  (index/a quadrants 0))
 
 ; Entity Node Number -> Boolean
-(define (fits? location child bounds)
+(define (fits? child location bounds)
   (define coords (node-coord child))
   ; currently, this only compares the central coordinates of the entity
   ; and doesn't take it's dimensions into account.
@@ -123,13 +154,8 @@ Entity := Ship
   ; (posn 1 1/2), the ship is placed at index 0 in the upper left.
   ; It occupies the edge between 0 and 1 index.
   (posn< coords location (posn (+ (posn-x coords) bounds)
-                                (+ (posn-y coords) bounds))))
+                               (+ (posn-y coords) bounds))))
 
-; [Listof Posn] -> Boolean
-; gives false if the ship is "on the line", b/c it must does not fit in any particular quad.
-  (define (posn< . coords)
-    (and (apply < (map posn-x coords))
-         (apply < (map posn-y coords))))
 
 ; Node Number Entity -> Node
 ; Problem: insert an entity into the appropriate subnode.
@@ -141,11 +167,12 @@ Entity := Ship
 ; Termination: Terminates by splitting a node, which must be empty by definition,
 ; and then inserting the entity into it.
 
-; Caveat: If the entity does not fit into any particular quadrant, the subnodes are still created
-; but the entity still sits at the root node. This complicates retrieval,
+; Caveat: If the entity does not fit into any particular quadrant, the subnodes are still
+; created but the entity still sits at the root node. This complicates retrieval,
 ; b/c now we have two potential locations for an entity.
 (define (insert-node tree bounds entity)
   (define child* (node-children tree))
+  (define index (get-index tree bounds entity))
 
   ; [Listof Node] -> [Listof Node]
   (define (update-child child entity)
@@ -156,66 +183,27 @@ Entity := Ship
              (node-children child))]
       [else
        (insert-node child (/ bounds 2) entity)]))
+
   ; - IN -
   (cond
-    ; maybe we should make the index the primary data here, to avoid needless splitting.
-    [(empty? child*) ; a node can have no children yet
+    [(false? index) (node (node-coord tree) (cons entity (node-content tree)) child*)]
+    [(empty? child*)
      (define new-tree (split tree bounds))
      (insert-node new-tree bounds entity)]
     [(cons? child*)
-     (define index (get-index tree bounds entity))
-     (cond
-       [(false? index)
-        (node (node-coord tree)
-              (cons entity (node-content tree))
-              child*)]
-       [else
-        (struct-copy node tree ; wow this is messy!
-                     [children
-                      (list-update child* index
-                                (λ (child) (update-child child entity)))])])]))
-; Posn Node -> [Maybe Any]
-; Question: Do we retrieve the first node in which the coordinate exists,
-; or the last? (i.e., the largest possible area or the smallest? If the coord is 0,0
-; then we could be retrieving the entire screen, OR an infinitesimaly small part
-; in the upper left corner). Then we might need to take dimension into account as well
-; Dimension is related to depth: Where max bounds is "B" and depth is "n", B^1/n.
-; Answer: We retrieve the last possible node. Now we don't need to worry about
-; dimension, as we only split the tree to put new objects in.
-(define (retrieve-node coords tree)
-  ; [Listof Node] -> Any
-  (define (search-in subtree)
-    (cond
-      [(empty? subtree) #f]
-      [else
-       (define candidate (retrieve-node coords (first subtree)))
-       (if candidate candidate (search-in (rest subtree)))]))
-  ; - IN -
-  (cond
-    [(posn=? coords (node-coord tree)) (node-content tree)]
-    [(cons? (node-children tree))
-     ;(ormap (λ (child) (retrieve-node coords child)) (node-children tree))]))
-     ; depth-first searching for nodes
-     (search-in (node-children tree))]
-    [(empty? (node-children tree)) #f]))
-#|
-; Content Posn Node -> Node
-; As a prototype, it's fine for this function to assume that we already have the coords
-; of the appropriate node. See above for problems.
-(define (insert-node entity coords tree)
-  (define (sub-insert subtree)
-    (map (λ (child) (insert-node entity coords child)) subtree))
-  ; - IN -
-  (cond
-    [(posn=? coords (node-coord tree))
-     (struct-copy node tree
-                  [content entity])]
-    [(cons? (node-children tree))
-     (node (node-coord tree) (node-content tree)
-           (sub-insert (node-children tree)))]
-    [else tree]))
-|#
-; Posn Posn -> Boolean
-(define (posn=? p1 p2)
-  (and (= (posn-x p1) (posn-x p2))
-       (= (posn-y p1) (posn-y p2))))
+     (struct-copy
+      node tree
+      [children (list-update child* index (λ (child) (update-child child entity)))])]))
+
+; Entity Number Node -> [Listof Entity]
+; should retrieve all entities an entity could collide with.
+; To do so, it gets the index of the entity, then returns all entities which are
+; above it in the tree. We need to determine where the entity exists in the tree.4
+; Possible: Traverse the tree while accumulating the entities in each level until
+;  you reach the entity searched for, then return all entities.
+(define (retrieve-node entity bounds tree)
+  (define index (get-index tree bounds entity)) ; how do we determine bounds?
+  (if index
+      (append (node-content (list-ref (node-children tree) index))
+              (retrieve entity (/ bounds 2) (list-ref (node-children tree) index)))
+      '())) ; or (node-content tree)
