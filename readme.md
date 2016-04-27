@@ -57,6 +57,18 @@ in `(node coord content children)`
 -   **Content :** The content of a node is a list of any entities which may collide.
 -   **Children:** A node can have either no children or four, each one of which is a node.
 
+See quad-notes.
+
+I have to change the big-bang
+function to update the quadtree. I can see two options here right off
+the bat: We refactor the module so that the quadtree is now the defining
+data structure, instead of the game struct. I'm not sure how I'll modify
+the quadtree module so that it doesn't just toss away player information
+(since it just uses entity, a supertype). The other option is two insert
+the quadtree as an additional field to the game struct. This feels
+redudant, since we'll be carrying along all the player and turret
+information in both the game struct AND the quadtree.
+
 ## Entity<a id="orgheadline6"></a>
 
 `(entity Posn Number Number)`
