@@ -1,36 +1,5 @@
 #lang racket
-(require 2htdp/image 2htdp/universe)
-; -------------------------------------------------------------------------------------
-#| DATA |#
-; -------------------------------------------------------------------------------------
-(struct pvec (x y) #:transparent)
-; pvec = (pvec Rational Rational)
-; in (pvec x y v)
-; -- x is the x-val
-; -- y is the y-val
-; New location = velocity applied to current location. Velocity is also a vectory
-; A location can be either a singular point
-; or the vector representing the difference between location and origin
-
-(struct player (magni veloc locat turns) #:transparent)
-; player = (player Integer Integer Polar)
-; in (player a v l)
-; -- a is the magnitude of the player's velocity
-; -- v is the player's velocity
-; -- l is the player's location
-
-(struct game (p t) #:transparent) ; contains a player and the turret
-
-; A turret could be:
-; 1. a pvec, representing it's x- and y-coords.
-; 2. a struct, containing a pvec and it's rotation and firing information
-
-; -------------------------------------------------------------------------------------
-#| DATA EXAMPLES |#
-; -------------------------------------------------------------------------------------
-(define ex-p
-  (player 10 (pvec 0 10) (pvec 360 360) 0))
-
+(require 2htdp/image 2htdp/universe "quadtree.rkt")
 ; -------------------------------------------------------------------------------------
 #| PHYSICAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
@@ -46,8 +15,46 @@
 ; -------------------------------------------------------------------------------------
 (define BACKG (empty-scene WIDTH HEIGHT))
 ;(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
-(define SHIP (triangle/sss 50 50 20 'solid 'thistle))
+;(define SHIP (triangle/sss 50 50 20 'solid 'thistle))
+(define SHIP (rotate 180 (bitmap/file "graphics/player-ship.png")))
 (define TURRET (circle 15 'solid 'orange))
+(define PWIDTH (image-width SHIP))
+(define PHEIGHT (image-height SHIP))
+
+; -------------------------------------------------------------------------------------
+#| DATA |#
+; -------------------------------------------------------------------------------------
+(struct pvec (x y) #:transparent)
+; pvec = (pvec Rational Rational)
+; in (pvec x y v)
+; -- x is the x-val
+; -- y is the y-val
+; New location = velocity applied to current location. Velocity is also a vectory
+; A location can be either a singular point
+; or the vector representing the difference between location and origin
+
+;(struct player (magni veloc locat turns) #:transparent)
+(struct player entity (magni veloc turns) #:transparent)
+; player = (player Integer Integer Polar)
+; in (player a v l)
+; -- a is the magnitude of the player's velocity
+; -- v is the player's velocity
+; -- l is the player's location
+
+(struct game (p t) #:transparent) ; contains a player and the turret
+
+; A turret could be:
+; 1. a pvec, representing it's x- and y-coords.
+; 2. a struct, containing a pvec and it's rotation and firing information
+
+; -------------------------------------------------------------------------------------
+#| DATA EXAMPLES |#
+; -------------------------------------------------------------------------------------
+#;(define ex-p
+  (player (entity (posn 360 360) (image-width SHIP) (image-height SHIP))
+          0 (pvec 0 10) 0))
+(define ex-p
+  (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 0 10) 0))
 
 ; -------------------------------------------------------------------------------------
 #| INITIALIZATION |#
@@ -67,12 +74,15 @@
 
 ; -> Player
 (define (init-player)
-  (player 0 (pvec 1 0) (pvec 360 360) INIT-TURN))
+  (player
+   (posn 360 360) PWIDTH PHEIGHT
+   0 (pvec 1 0) INIT-TURN))
   ;(player 0 (pvec 0 0) (pvec (random WIDTH) (random HEIGHT))))
 
 ; -> Turret
 (define (init-turret)
-  (pvec (random WIDTH) (random HEIGHT)))
+  (entity (posn (random WIDTH) (random HEIGHT))
+          (image-width TURRET) (image-height TURRET)))
 
 ; -------------------------------------------------------------------------------------
 #| LOGIC |#
@@ -82,6 +92,12 @@
 
 (define (cos~ n)
   (rationalize (cos n) .1))
+
+; Posn Vector -> Posn
+(define (loc+ p v)
+  (posn
+   (rationalize (+ (posn-x p) (pvec-x v)) .1)
+   (rationalize (+ (posn-y p) (pvec-y v)) .1)))
 
 ;;----------VECTORS----------;;
 ; Pvec Pvec -> Pvec
@@ -153,7 +169,7 @@
     ["right" (move pl (modulo (sub1 t) MAX-TURNS))]
     ["up"    (struct-copy player pl [magni (intrvl add1 s)])]
     ["down"  (struct-copy player pl [magni (intrvl sub1 s)])]
-    ["r"     (player 0 (pvec 1 0) (pvec 360 360) INIT-TURN)]
+    ["r"     (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 1 0) INIT-TURN)]
     [_ pl]))
 
 ; Turret -> Turret
@@ -184,12 +200,16 @@
 ; Player -> Player
 (define (fly-ship pl)
   (define vel     (player-veloc pl))
-  (define loc     (player-locat pl))
+  (define loc     (entity-coord pl))
   (define s       (player-magni pl))
-  (define new-loc (vec+ loc (rotate-quad (vec-scale vel s))))
+  (define new-loc (loc+ loc (rotate-quad (vec-scale vel s))))
   ; - IN -
-  (if (and (<= 0 (pvec-x new-loc) WIDTH) (<= 0 (pvec-y new-loc) HEIGHT))
-      (struct-copy player pl [locat new-loc])
+  (if (and (<= 0 (posn-x new-loc) WIDTH) (<= 0 (posn-y new-loc) HEIGHT))
+      ;(struct-copy player pl [coord new-loc])
+      #;(player (struct-copy entity pl [coord new-loc])
+                (player-magni pl) (player-veloc pl) (player-turns pl))
+      (player new-loc PWIDTH PHEIGHT
+              (player-magni pl) (player-veloc pl) (player-turns pl))
       pl))
 
 ; Turret -> Turret
@@ -197,8 +217,8 @@
   tr)
 
 ; Pvec -> Pvec
-; rotates the quadrant a vector is in in accordance with how racket interprets
-; negative and positive movement.
+; rotates the quadrant in a cartesian plane a vector is in
+; in accordance with how racket interprets negative and positive movement.
 (define (rotate-quad vec)
   (match vec
     [(pvec x y) (pvec x (- y))]))
@@ -215,13 +235,14 @@
 (define (render-ship pl im)
   (place-image
    (rotate (rationalize (+ 90 (* (radians->degrees TURN-RATE) (player-turns pl))) .5) SHIP)
-   (pvec-x (player-locat pl))
-   (pvec-y (player-locat pl))
+   (posn-x (entity-coord pl))
+   (posn-y (entity-coord pl))
    im))
 
 ; Turret Image -> Image
 (define (render-turret tr im)
-  (place-image TURRET (pvec-x tr) (pvec-y tr) im))
+  (define crds (entity-coord tr))
+  (place-image TURRET (posn-x crds) (posn-y crds) im))
 
 (define start-game
   (thread start))

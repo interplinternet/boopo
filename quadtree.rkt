@@ -1,5 +1,6 @@
 #lang racket
-(provide entity node posn
+(provide (struct-out entity) (struct-out node) (struct-out posn)
+         (struct-out entity) ROOT
          retrieve-node insert-node)
 ;-------------------------------------------------------------------------------------
 #| DATA |#
@@ -23,12 +24,25 @@ Entity := Ship
 (define MAX 3)
 ; no more than thre objects per node.
 ; reason: the game only has a turret, a ship, and a projectile.
+
+; Number -> Void
+; provides a way to alter these constants from outside the module.
+(define (depth-set! n)
+  (set! DEPTH n))
+
+; Number -> Void
+(define (bounds-set! n)
+  (set! BOUNDS n))
+
+; Number -> Void
+(define (max-set! n)
+  (set! MAX n))
 ;-------------------------------------------------------------------------------------
 #| EXAMPLES |#
 ;-------------------------------------------------------------------------------------
-(define MAX-THINGS '(flying-ship other-ship uhh some-thing))
-(define ONE-THING '(flying-ship))
-(define TWO-THINGS '(flying-ship other-ship))
+;(define MAX-THINGS '(flying-ship other-ship uhh some-thing))
+;(define ONE-THING '(flying-ship))
+;(define TWO-THINGS '(flying-ship other-ship))
 (define ROOT (node (posn 0 0) '() '())) ; a node with no entities
 ;(define root2 (node (posn 0 0) MAX-THINGS '())) ;max-nodes, split!
 #;(define root3 (node (posn 0 0) (list (node (posn 0 0) ...)
