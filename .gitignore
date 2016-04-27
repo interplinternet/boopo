@@ -3,7 +3,12 @@
 /mrred*.rkt
 
 # org files to be exported to another format
+<<<<<<< HEAD
 /*.org
+=======
+/*-export.org
+*.org
+>>>>>>> master
 
 # emacs autosave files
 .\#*\#?
