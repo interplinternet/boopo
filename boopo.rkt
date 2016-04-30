@@ -49,7 +49,9 @@
 ; -- v is the player's velocity
 ; -- l is the player's location
 
-(struct game (p t) #:transparent) ; contains a player and the turret
+(struct game (p t q) #:transparent)
+; (game Player Entity Quadtree)
+; contains the player, the turret, and a quadtree for collision detection.
 
 ; A turret could be:
 ; 1. a pvec, representing it's x- and y-coords.
@@ -59,8 +61,8 @@
 #| DATA EXAMPLES |#
 ; -------------------------------------------------------------------------------------
 #;(define ex-p
-  (player (entity (posn 360 360) (image-width SHIP) (image-height SHIP))
-          0 (pvec 0 10) 0))
+    (player (entity (posn 360 360) (image-width SHIP) (image-height SHIP))
+            0 (pvec 0 10) 0))
 (define ex-p
   (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 0 10) 0))
 
@@ -78,14 +80,14 @@
 
 ; -> Game
 (define (init-game)
-  (game (init-player) (init-turret)))
+  (game (init-player) (init-turret) ROOT))
 
 ; -> Player
 (define (init-player)
   (player
    (posn 360 360) PWIDTH PHEIGHT
    0 (pvec 1 0) INIT-TURN))
-  ;(player 0 (pvec 0 0) (pvec (random WIDTH) (random HEIGHT))))
+;(player 0 (pvec 0 0) (pvec (random WIDTH) (random HEIGHT))))
 
 ; -> Turret
 (define (init-turret)
@@ -164,148 +166,153 @@
 ; Game KeyEvent -> Game
 (define (direct-game g ke)
   (define p (game-p g))
+  (define new-ship (direct-ship p ke))
+  (define new-turret (direct-turret (game-t g)))
   (game
-   (direct-ship p ke)
-   (direct-turret (game-t g))))
+   new-ship new-turret
+   (insert-node (insert-node ROOT new-ship WIDTH) new-turret WIDTH)))
 
-; Player -> Player
-(define (direct-ship pl ke)
-  (define s (player-magni pl))
-  (define t (player-turns pl))
-  (match ke
-    ["left"  (move pl (modulo (add1 t) MAX-TURNS))]
-    ["right" (move pl (modulo (sub1 t) MAX-TURNS))]
-    ["up"    (struct-copy player pl [magni (intrvl add1 s)])]
-    ["down"  (struct-copy player pl [magni (intrvl sub1 s)])]
-    ["r"     (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 1 0) INIT-TURN)]
-    [_ pl]))
+  ; Player -> Player
+  (define (direct-ship pl ke)
+    (define s (player-magni pl))
+    (define t (player-turns pl))
+    (match ke
+      ["left"  (move pl (modulo (add1 t) MAX-TURNS))]
+      ["right" (move pl (modulo (sub1 t) MAX-TURNS))]
+      ["up"    (struct-copy player pl [magni (intrvl add1 s)])]
+      ["down"  (struct-copy player pl [magni (intrvl sub1 s)])]
+      ["r"     (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 1 0) INIT-TURN)]
+      [_ pl]))
 
-; Turret -> Turret
-; for now, there is nothing you can do with the turret. If it turns out that there's never
-; anything to do with it, I'll just remove this.
-(define (direct-turret tr)
-  tr)
+  ; Turret -> Turret
+  ; for now, there is nothing you can do with the turret. If it turns out that
+  ; there's never anything to do with it, I'll just remove this.
+  (define (direct-turret tr)
+    tr)
 
-(define (intrvl proc n)
-  (define new (proc n))
-  (cond
-    [(< new 0) 0]
-    [(> new MAX-SPEED) MAX-SPEED]
-    [else new]))
+  ; [Number -> Number] Number -> Number
+  (define (intrvl proc n)
+    (define new (proc n))
+    (cond
+      [(< new 0) 0]
+      [(> new MAX-SPEED) MAX-SPEED]
+      [else new]))
 
-; Player Number -> Player
-(define (move pl turn#)
-  (struct-copy player pl
-               [veloc (pvec (cos~ (* TURN-RATE turn#))
-                            (sin~ (* TURN-RATE turn#)))]
-               [turns turn#]))
+  ; Player Number -> Player
+  (define (move pl turn#)
+    (struct-copy player pl
+                 [veloc (pvec (cos~ (* TURN-RATE turn#))
+                              (sin~ (* TURN-RATE turn#)))]
+                 [turns turn#]))
 
-; Game -> Game
-(define (update-game g)
-  (game (fly-ship (game-p g))
-        (rotate-turret (game-t g))))
+  ; Game -> Game
+  (define (update-game g)
+    (game (fly-ship (game-p g))
+          (rotate-turret (game-t g))
+          (insert-node (insert-node ROOT (game-p g) WIDTH) (game-t g) WIDTH)))
 
-; Player -> Player
-(define (fly-ship pl)
-  (define vel     (player-veloc pl))
-  (define loc     (entity-coord pl))
-  (define s       (player-magni pl))
-  (define new-loc (loc+ loc (rotate-quad (vec-scale vel s))))
-  ; - IN -
-  (if (and (<= 0 (posn-x new-loc) WIDTH) (<= 0 (posn-y new-loc) HEIGHT))
-      ;(struct-copy player pl [coord new-loc])
-      #;(player (struct-copy entity pl [coord new-loc])
+  ; Player -> Player
+  (define (fly-ship pl)
+    (define vel     (player-veloc pl))
+    (define loc     (entity-coord pl))
+    (define s       (player-magni pl))
+    (define new-loc (loc+ loc (rotate-quad (vec-scale vel s))))
+    ; - IN -
+    (if (and (<= 0 (posn-x new-loc) WIDTH) (<= 0 (posn-y new-loc) HEIGHT))
+        ;(struct-copy player pl [coord new-loc])
+        #;(player (struct-copy entity pl [coord new-loc])
+                  (player-magni pl) (player-veloc pl) (player-turns pl))
+        (player new-loc PWIDTH PHEIGHT
                 (player-magni pl) (player-veloc pl) (player-turns pl))
-      (player new-loc PWIDTH PHEIGHT
-              (player-magni pl) (player-veloc pl) (player-turns pl))
-      pl))
+        pl))
 
-; Turret -> Turret
-(define (rotate-turret tr)
-  tr)
+  ; Turret -> Turret
+  (define (rotate-turret tr)
+    tr)
 
-; Pvec -> Pvec
-; rotates the quadrant in a cartesian plane a vector is in
-; in accordance with how racket interprets negative and positive movement.
-(define (rotate-quad vec)
-  (match vec
-    [(pvec x y) (pvec x (- y))]))
+  ; Pvec -> Pvec
+  ; rotates the quadrant in a cartesian plane a vector is in
+  ; in accordance with how racket interprets negative and positive movement.
+  (define (rotate-quad vec)
+    (match vec
+      [(pvec x y) (pvec x (- y))]))
 
-; -------------------------------------------------------------------------------------
-#| RENDERING |#
-; -------------------------------------------------------------------------------------
-; Game -> Image
-(define (render-game g)
-  (render-ui (game-p g)
-             (render-ship (game-p g)
-                          (render-turret (game-t g)
-                                         (render-bg (game-p g) BACKG)))))
+  ; -------------------------------------------------------------------------------------
+  #| RENDERING |#
+  ; -------------------------------------------------------------------------------------
+  ; Game -> Image
+  (define (render-game g)
+    (render-ui (game-p g)
+               (render-ship (game-p g)
+                            (render-turret (game-t g)
+                                           (render-bg (game-p g) BACKG)))))
 
-; Player Image -> Image
-(define (render-ui pl im)
-  (overlay/align 'center 'bottom
-                 (text (number->string (player-magni pl)) 20 'black)
-                 im))
-; Player Image -> Image
-(define (render-ship pl im)
-  (place-image
-   (rotate (rationalize (+ 90 (* (radians->degrees TURN-RATE) (player-turns pl))) .5) SHIP)
-   (posn-x (entity-coord pl))
-   (posn-y (entity-coord pl))
-   im))
+  ; Player Image -> Image
+  (define (render-ui pl im)
+    (overlay/align 'center 'bottom
+                   (text (number->string (player-magni pl)) 20 'black)
+                   im))
 
-; Turret Image -> Image
-(define (render-turret tr im)
-  (define crds (entity-coord tr))
-  (place-image TURRET (posn-x crds) (posn-y crds) im))
+  ; Player Image -> Image
+  (define (render-ship pl im)
+    (place-image
+     (rotate (rationalize
+              (+ 90 (* (radians->degrees TURN-RATE) (player-turns pl))) .5) SHIP)
+     (posn-x (entity-coord pl))
+     (posn-y (entity-coord pl))
+     im))
 
-; Player Image -> Image
-(define (render-bg pl im)
-  (define coords (entity-coord pl))
-  (scroll im
-          (posn-x coords)
-          (posn-y coords)
-          (/ (difference (posn-x coords) 360)
-             360)
-          (/ (difference (posn-y coords) 360) 
-             360)))
+  ; Turret Image -> Image
+  (define (render-turret tr im)
+    (define crds (entity-coord tr))
+    (place-image TURRET (posn-x crds) (posn-y crds) im))
 
-; Number Number -> Number
-; consumes two numbers and produces the difference between them
-(define (difference n m)
-  (abs (- n m)))
+  ; Player Image -> Image
+  (define (render-bg pl im)
+    (define coords (entity-coord pl))
+    (scroll im
+            (posn-x coords)
+            (posn-y coords)
+            (/ (difference (posn-x coords) 360)
+               360)
+            (/ (difference (posn-y coords) 360) 
+               360)))
 
-; Posn Posn -> Number
-; determines the distance between two cartesian points. Using this instead
-; of taking the "straight" difference between x/y and 360 leads to some odd
-; results corresponding to sine/cosine motions around the circle.
-(define (distance point origin)
-  (sqrt (+ (sqr (- (posn-x point) (posn-x origin)))
-           (sqr (- (posn-x point) (posn-y origin))))))
+  ; Number Number -> Number
+  ; consumes two numbers and produces the difference between them
+  (define (difference n m)
+    (abs (- n m)))
 
-; Image Number-> Image
-; scrolls a background left by x and up by y
-; given a background image, a current upper-left corner, and an amount to scroll by:
-; return a new image resulting from translating the given corner by x and y
-(define (scroll bg x-coord y-coord x-rate y-rate)
-  (define cur-x (+ INIT_X (* (- x-coord 360) x-rate)))
-  ; as the player moves left, the background moves right by the
-  ; distance between the player and the center.
-  (define cur-y (+ INIT_Y (* (- y-coord 360) y-rate)))
-  ; - IN -
-  (overlay/align 'left 'top
-                 (render-info (list cur-x cur-y))
-                 (crop cur-x cur-y WIDTH HEIGHT bg)))
-                
-#;(define start-game
-    (thread start))
+  ; Posn Posn -> Number
+  ; determines the distance between two cartesian points. Using this instead
+  ; of taking the "straight" difference between x/y and 360 leads to some odd
+  ; results corresponding to sine/cosine motions around the circle.
+  (define (distance point origin)
+    (sqrt (+ (sqr (- (posn-x point) (posn-x origin)))
+             (sqr (- (posn-x point) (posn-y origin))))))
 
-; [Listof Number] -> Image
-; takes in a list of information, transforms it into strings, then appends
-; labels to it, then flattens it into a single string and renders it.
-(define (render-info info*)
-  (define lo-str (map number->string info*))
-  (define label+info (map (λ (label info) (string-append label " " info " "))
-                          (list "cur-x:" "cur-y:")
-                          lo-str))
-  (text (apply string-append label+info) 20 'black))
+  ; Image Number-> Image
+  ; scrolls a background left by x and up by y
+  ; given a background image, a current upper-left corner,
+  ; and an amount to scroll by:
+  ; return a new image resulting from translating the given corner by x and y
+  (define (scroll bg x-coord y-coord x-rate y-rate)
+    (define cur-x (+ INIT_X (* (- x-coord 360) x-rate)))
+    (define cur-y (+ INIT_Y (* (- y-coord 360) y-rate)))
+    ; - IN -
+    (overlay/align 'left 'top
+                   (render-info (list cur-x cur-y))
+                   (crop cur-x cur-y WIDTH HEIGHT bg)))
+
+  #;(define start-game
+      (thread start))
+
+  ; [Listof Number] -> Image
+  ; takes in a list of information, transforms it into strings, then appends
+  ; labels to it, then flattens it into a single string and renders it.
+  (define (render-info info*)
+    (define lo-str (map number->string info*))
+    (define label+info (map (λ (label info) (string-append label " " info " "))
+                            (list "cur-x:" "cur-y:")
+                            lo-str))
+    (text (apply string-append label+info) 20 'black))

@@ -108,7 +108,7 @@ Entity := Ship
   (struct-copy node a-node
                [children (map (λ (child) (node child '() '())) new-quads)]))
 
-; Node Number Entity -> [Maybe Number]
+; Node Entity Number -> [Maybe Number]
 ; consumes a tree, the dimension at that level,
 ; and returns the index of the quadrant it belongs in.
 ; Assumes an already split node. #f if it cannot fit.
@@ -129,7 +129,7 @@ Entity := Ship
       ; - IN -
   (index/a quadrants 0))
 
-; Entity Node Number -> Boolean
+; Node Entity Number -> Boolean
 (define (fits? child thing [bounds BOUNDS])
   (define coords (node-coord child))
   (in-bounds? coords
@@ -149,7 +149,7 @@ Entity := Ship
 ; and then inserting the entity into it.
 (define (insert-node tree entity [bounds BOUNDS])
   (define child* (node-children tree))
-  (define index (get-index tree bounds entity))
+  (define index (get-index tree entity bounds))
 
   ; [Listof Node] -> [Listof Node]
   (define (update-child child entity)
@@ -177,7 +177,7 @@ Entity := Ship
 ; Traverse the tree while accumulating the entities in each level until
 ;  you pass the entity searched for, then return all entities in that node.
 (define (retrieve-node entity tree [bounds BOUNDS])
-  (define index (get-index tree bounds entity))
+  (define index (get-index tree entity bounds))
   (if index
       (retrieve-node entity (list-ref (node-children tree) index) (/ bounds 2))
       (node-content tree)))
