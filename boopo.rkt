@@ -13,13 +13,21 @@
 ; -------------------------------------------------------------------------------------
 #| VISUAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
-(define BACKG (empty-scene WIDTH HEIGHT))
+;(define BACKG (empty-scene WIDTH HEIGHT))
+(define SPACE (bitmap/file "graphics/big_space.bmp"))
+(define BACKG SPACE)
 ;(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
 ;(define SHIP (triangle/sss 50 50 20 'solid 'thistle))
 (define SHIP (rotate 180 (bitmap/file "graphics/player-ship.png")))
 (define TURRET (circle 15 'solid 'orange))
 (define PWIDTH (image-width SHIP))
 (define PHEIGHT (image-height SHIP))
+(define BWIDTH (image-width BACKG))
+(define BHEIGHT (image-height BACKG))
+(define BXCENTER (/ BWIDTH 2))
+(define BYCENTER (/ BHEIGHT 2))
+(define INIT_X (/ BWIDTH 4)) ; the initial x and y coordinates on the background
+(define INIT_Y (/ BHEIGHT 4))
 
 ; -------------------------------------------------------------------------------------
 #| DATA |#
@@ -226,11 +234,18 @@
 ; -------------------------------------------------------------------------------------
 #| RENDERING |#
 ; -------------------------------------------------------------------------------------
-; Player -> Image
+; Game -> Image
 (define (render-game g)
-  (render-ship (game-p g)
-               (render-turret (game-t g) BACKG)))
+  (render-ui (game-p g)
+             (render-ship (game-p g)
+                          (render-turret (game-t g)
+                                         (render-bg (game-p g) BACKG)))))
 
+; Player Image -> Image
+(define (render-ui pl im)
+  (overlay/align 'center 'bottom
+                 (text (number->string (player-magni pl)) 20 'black)
+                 im))
 ; Player Image -> Image
 (define (render-ship pl im)
   (place-image
@@ -244,5 +259,53 @@
   (define crds (entity-coord tr))
   (place-image TURRET (posn-x crds) (posn-y crds) im))
 
-(define start-game
-  (thread start))
+; Player Image -> Image
+(define (render-bg pl im)
+  (define coords (entity-coord pl))
+  (scroll im
+          (posn-x coords)
+          (posn-y coords)
+          (/ (difference (posn-x coords) 360)
+             360)
+          (/ (difference (posn-y coords) 360) 
+             360)))
+
+; Number Number -> Number
+; consumes two numbers and produces the difference between them
+(define (difference n m)
+  (abs (- n m)))
+
+; Posn Posn -> Number
+; determines the distance between two cartesian points. Using this instead
+; of taking the "straight" difference between x/y and 360 leads to some odd
+; results corresponding to sine/cosine motions around the circle.
+(define (distance point origin)
+  (sqrt (+ (sqr (- (posn-x point) (posn-x origin)))
+           (sqr (- (posn-x point) (posn-y origin))))))
+
+; Image Number-> Image
+; scrolls a background left by x and up by y
+; given a background image, a current upper-left corner, and an amount to scroll by:
+; return a new image resulting from translating the given corner by x and y
+(define (scroll bg x-coord y-coord x-rate y-rate)
+  (define cur-x (+ INIT_X (* (- x-coord 360) x-rate)))
+  ; as the player moves left, the background moves right by the
+  ; distance between the player and the center.
+  (define cur-y (+ INIT_Y (* (- y-coord 360) y-rate)))
+  ; - IN -
+  (overlay/align 'left 'top
+                 (render-info (list cur-x cur-y))
+                 (crop cur-x cur-y WIDTH HEIGHT bg)))
+                
+#;(define start-game
+    (thread start))
+
+; [Listof Number] -> Image
+; takes in a list of information, transforms it into strings, then appends
+; labels to it, then flattens it into a single string and renders it.
+(define (render-info info*)
+  (define lo-str (map number->string info*))
+  (define label+info (map (λ (label info) (string-append label " " info " "))
+                          (list "cur-x:" "cur-y:")
+                          lo-str))
+  (text (apply string-append label+info) 20 'black))

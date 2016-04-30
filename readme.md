@@ -18,7 +18,12 @@
 <li><a href="#orgheadline10">4.5. Turret</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline12">5. Rendering</a></li>
+<li><a href="#orgheadline14">5. Rendering</a>
+<ul>
+<li><a href="#orgheadline12">5.1. Progress:</a></li>
+<li><a href="#orgheadline13">5.2. Scrolling</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -105,7 +110,20 @@ The turret hasn't been implemented yet, here are some ideas:
 -   After recording three such locations, it determines a best-fit linear function between the three points (such as in a scatter-plot).
 -   It then fires at a location f(x), taking into account the player's speed along.
 
-# Rendering<a id="orgheadline12"></a>
+# Rendering<a id="orgheadline14"></a>
 
 I think I'll represent the game visually as a three-layered image. The bottom image is the background (land masses, some clouds, water, space, etc.). The second image contains the ships, obstacles, and turrets. The third image might have more clouds.
 I'll look into parallax scrolling too, which could be scaled by the player's magnitude, or maybe even the player's angle.
+
+## Progress:<a id="orgheadline12"></a>
+
+Renders by overlaying the ship over the turret over the background.
+The background is rendered by "scrolling" a larger image via successive cropping around the player.
+
+## Scrolling<a id="orgheadline13"></a>
+
+Takes a background image, the current coordinates of the upper-left corner, and the rate at which the background scrolls by x- and y-coords. It produces a new image, cropped to the dimensions of the screen such that the player is centered, with the background "scrolled" in the opposite direction by the player's speed.
+The initial coordinates are determined by a constant, which is the coordinate location of the viewport on the background screen. As the player moves around the screen, the background is scrolled by their speed per tick.
+Maybe I could stick the current coordinates of the background in the game-struct? That might make it easier to keep track of where the screen is in relation to the background, so we know when to stop scrolling.
+
+-   **Solved:** Increase the size of the background, decrease the rate at which the background scrolls in proportion to the player's distance from the center. Now you won't be able to scroll past the boundaries of the background image at all.
