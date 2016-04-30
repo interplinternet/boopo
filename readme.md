@@ -5,23 +5,27 @@
 <li><a href="#orgheadline1">1. Boopo's Escape</a></li>
 <li><a href="#orgheadline2">2. Current progress:</a></li>
 <li><a href="#orgheadline3">3. <span class="todo nilTODO">TODO</span> <code>[1/5]</code></a></li>
-<li><a href="#orgheadline11">4. Data</a>
+<li><a href="#orgheadline12">4. Data</a>
 <ul>
 <li><a href="#orgheadline4">4.1. Pvectors</a></li>
-<li><a href="#orgheadline5">4.2. Quadtree</a></li>
-<li><a href="#orgheadline6">4.3. Entity</a></li>
-<li><a href="#orgheadline9">4.4. Player</a>
+<li><a href="#orgheadline6">4.2. Quadtree</a>
 <ul>
-<li><a href="#orgheadline8">4.4.1. Notes</a></li>
+<li><a href="#orgheadline5">4.2.1. Update to main module:</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline10">4.5. Turret</a></li>
+<li><a href="#orgheadline7">4.3. Entity</a></li>
+<li><a href="#orgheadline10">4.4. Player</a>
+<ul>
+<li><a href="#orgheadline9">4.4.1. Notes</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline14">5. Rendering</a>
+<li><a href="#orgheadline11">4.5. Turret</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline15">5. Rendering</a>
 <ul>
-<li><a href="#orgheadline12">5.1. Progress:</a></li>
-<li><a href="#orgheadline13">5.2. Scrolling</a></li>
+<li><a href="#orgheadline13">5.1. Progress:</a></li>
+<li><a href="#orgheadline14">5.2. Scrolling</a></li>
 </ul>
 </li>
 </ul>
@@ -44,7 +48,7 @@ A ship and turret can be rendered on the background. You can fly the ship around
 -   [ ] Add turret tracking.
 -   [ ] Implement three-layer rendering.
 
-# Data<a id="orgheadline11"></a>
+# Data<a id="orgheadline12"></a>
 
 ## Pvectors<a id="orgheadline4"></a>
 
@@ -53,7 +57,7 @@ A 2-dimensional vector, `(pvector Integer Integer)` in `(pvector x y)` can repre
 -   **x:** the ship's velocity in the horizontal plane, or its horizontal distance from the origin
 -   **y:** the ship's velocity in the vertical plane, or its vertical distance from the origin
 
-## Quadtree<a id="orgheadline5"></a>
+## Quadtree<a id="orgheadline6"></a>
 
 `(node Posn [Listof Any] (U Empty [List Node Node Node Node]))`
 in `(node coord content children)`
@@ -64,8 +68,9 @@ in `(node coord content children)`
 
 See quad-notes.
 
-I have to change the big-bang
-function to update the quadtree. I can see two options here right off
+### Update to main module:<a id="orgheadline5"></a>
+
+I have to change the big-bang function to update the quadtree. I can see two options here right off
 the bat: We refactor the module so that the quadtree is now the defining
 data structure, instead of the game struct. I'm not sure how I'll modify
 the quadtree module so that it doesn't just toss away player information
@@ -74,7 +79,9 @@ the quadtree as an additional field to the game struct. This feels
 redudant, since we'll be carrying along all the player and turret
 information in both the game struct AND the quadtree.
 
-## Entity<a id="orgheadline6"></a>
+-   **Status:** I made the quadtree a secondary data structure, it's carried along in the field of the game-struct. I'll have to look at this more closely. Right now it's VERY slow to move around the screen.
+
+## Entity<a id="orgheadline7"></a>
 
 `(entity Posn Number Number)`
 in `(entity coord width height`
@@ -85,7 +92,7 @@ in `(entity coord width height`
 
 Right now I'm planning on having the player's struct extend the entity struct with magnitude and rotation.
 
-## Player<a id="orgheadline9"></a>
+## Player<a id="orgheadline10"></a>
 
 `(player Natural Pvector Pvector Natural)` 
 in `(player m v l t)`
@@ -95,13 +102,13 @@ in `(player m v l t)`
 -   **l:** A Pvector representing the location of the ship as the distance from the origin, the upper left, of the screen.
 -   **t:** The number of turns around the circle in "n" radian units. Used for rendering the ship at the appropriate angle and for rotating the ship during play.
 
-### Notes<a id="orgheadline8"></a>
+### Notes<a id="orgheadline9"></a>
 
 1.  The controls are fine now, but previously:
 
     -   The controls were a little buggy. Left and right didn't determine the *heading* of the ship's velocity, they alter the velocity itself directly. This means that pressing left and right sends you careening off in that direction, instead of just changing direction. It's kind of fun though. "Horizontal thrusters", really. Might be fun to look into this kind of movement more and polish it up for an alternative control scheme.
 
-## Turret<a id="orgheadline10"></a>
+## Turret<a id="orgheadline11"></a>
 
 The turret hasn't been implemented yet, here are some ideas:
 
@@ -110,17 +117,17 @@ The turret hasn't been implemented yet, here are some ideas:
 -   After recording three such locations, it determines a best-fit linear function between the three points (such as in a scatter-plot).
 -   It then fires at a location f(x), taking into account the player's speed along.
 
-# Rendering<a id="orgheadline14"></a>
+# Rendering<a id="orgheadline15"></a>
 
 I think I'll represent the game visually as a three-layered image. The bottom image is the background (land masses, some clouds, water, space, etc.). The second image contains the ships, obstacles, and turrets. The third image might have more clouds.
 I'll look into parallax scrolling too, which could be scaled by the player's magnitude, or maybe even the player's angle.
 
-## Progress:<a id="orgheadline12"></a>
+## Progress:<a id="orgheadline13"></a>
 
 Renders by overlaying the ship over the turret over the background.
 The background is rendered by "scrolling" a larger image via successive cropping around the player.
 
-## Scrolling<a id="orgheadline13"></a>
+## Scrolling<a id="orgheadline14"></a>
 
 Takes a background image, the current coordinates of the upper-left corner, and the rate at which the background scrolls by x- and y-coords. It produces a new image, cropped to the dimensions of the screen such that the player is centered, with the background "scrolled" in the opposite direction by the player's speed.
 The initial coordinates are determined by a constant, which is the coordinate location of the viewport on the background screen. As the player moves around the screen, the background is scrolled by their speed per tick.
