@@ -1,6 +1,7 @@
 #lang racket
 (provide (struct-out entity) (struct-out node) (struct-out posn)
          (struct-out entity) ROOT
+         depth-set! bounds-set! max-set!
          retrieve-node insert-node)
 ;-------------------------------------------------------------------------------------
 #| DATA |#
@@ -44,6 +45,7 @@ Entity := Ship
 ;(define ONE-THING '(flying-ship))
 ;(define TWO-THINGS '(flying-ship other-ship))
 (define ROOT (node (posn 0 0) '() '())) ; a node with no entities
+(define VROOT (node (posn 0 0) #() #()))
 ;(define root2 (node (posn 0 0) MAX-THINGS '())) ;max-nodes, split!
 #;(define root3 (node (posn 0 0) (list (node (posn 0 0) ...)
                                      (node (posn 0 2) ...)
