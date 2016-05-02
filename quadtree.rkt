@@ -1,8 +1,9 @@
 #lang racket
 (provide (struct-out entity) (struct-out node) (struct-out posn)
-         (struct-out entity) ROOT
+         (struct-out entity) VROOT
          depth-set! bounds-set! max-set!
          retrieve-node insert-node)
+(require racket/trace)
 ;-------------------------------------------------------------------------------------
 #| DATA |#
 ;-------------------------------------------------------------------------------------
@@ -45,12 +46,13 @@ Entity := Ship
 ;(define ONE-THING '(flying-ship))
 ;(define TWO-THINGS '(flying-ship other-ship))
 (define ROOT (node (posn 0 0) '() '())) ; a node with no entities
-(define VROOT (node (posn 0 0) #() #()))
+(define VROOT (node (posn 0 0) '() #()))
 ;(define root2 (node (posn 0 0) MAX-THINGS '())) ;max-nodes, split!
 #;(define root3 (node (posn 0 0) (list (node (posn 0 0) ...)
                                      (node (posn 0 2) ...)
                                      (node (posn 2 0) ...)
                                      (node (posn 2 2) ...))))
+(define ex-ent (entity (posn 3/2 1/2) 1 1))
 
 
 ;-------------------------------------------------------------------------------------
@@ -73,13 +75,14 @@ Entity := Ship
   (posn-oper > coords))
 
 ; Posn Entity Posn -> Boolean
-(define (in-bounds? coords thing bounds)
-  (and (< (posn-x coords) (posn-x (entity-coord thing))
-          (+ (posn-x (entity-coord thing)) (entity-width thing))
+(define (in-bounds? quad-coords thing bounds)
+  (define ent-coords (entity-coord thing))
+  (and (<= (posn-x quad-coords) (posn-x ent-coords)
+          (+ (posn-x ent-coords) (entity-width thing))
           (posn-x bounds))
-       (< (posn-y coords) (posn-y (entity-coord thing))
-          (+ (posn-y (entity-coord thing)) (entity-height thing))
-          (posn-y bounds))))
+       (>= (posn-y bounds)
+          (+ (posn-y ent-coords) (entity-height thing))
+          (posn-y ent-coords) (posn-y quad-coords))))
 
 ;----------QUADTREE----------
 ; for easy prototyping, we use lists to represent the tree.
@@ -100,6 +103,8 @@ Entity := Ship
         (posn x (+ y dimension))
         (posn (+ x dimension) (+ y dimension))))
 
+(define ex-squares (make-squares 0 0 2))
+
 ; Node Number -> Node
 ; splits a node with dimension "bounds" into a node with 4 subnodes
 (define (split a-node [bounds BOUNDS])
@@ -108,7 +113,11 @@ Entity := Ship
                                   (/ bounds 2)))
   ; - IN -
   (struct-copy node a-node
-               [children (map (λ (child) (node child '() '())) new-quads)]))
+               ;[children (map (λ (coords) (node coords '() '())) new-quads)]))
+               [children (for/vector #:length 4
+                                     ([coord (in-list new-quads)])
+                           (node coord '() #()))]))
+
 
 ; Node Entity Number -> [Maybe Number]
 ; consumes a tree, the dimension at that level,
@@ -121,14 +130,17 @@ Entity := Ship
         (node-children (split tree bounds))
         (node-children tree)))
 
+  (define half-bounds (/ bounds 2))
   ; [Listof Node] Number -> Node
   ; the accumulator represents the index of the node being investigated.
   (define (index/a subquads index)
-    (cond
-      [(empty? subquads) #f]
-      [(fits? (first subquads) location (/ bounds 2)) index]
-      [else (index/a (rest subquads) (add1 index))]))
-      ; - IN -
+    #| (cond
+      [(= index 4) (if (fits? (vector-ref subquads index) location half-bounds) index #f)]
+      [(fits? (vector-ref subquads index) location half-bounds) index]
+    [else (index/a subquads (add1 index))])) |#
+    (for/first ([(q i) (in-indexed (in-vector subquads))]
+                #:when (fits? q location half-bounds))
+      i))
   (index/a quadrants 0))
 
 ; Node Entity Number -> Boolean
@@ -153,12 +165,14 @@ Entity := Ship
   (define child* (node-children tree))
   (define index (get-index tree entity bounds))
 
-  ; [Listof Node] -> [Listof Node]
+  ; Node -> Node
+  ; consumes a child node and an entity to insert into it. If there's room,
+  ; insert it. If not, split the child and recurse.
   (define (update-child child entity)
     (cond
       [(< (length (node-content child)) MAX)
        (struct-copy node child
-                    [children (cons entity (node-content child))])]
+                    [content (cons entity (node-content child))])]
       [else
        (insert-node child entity (/ bounds 2))]))
 
@@ -166,13 +180,22 @@ Entity := Ship
   (cond
     [(false? index)
      (node (node-coord tree) (cons entity (node-content tree)) child*)]
-    [(empty? child*)
+    [(zero? (vector-length child*))
      (define new-tree (split tree bounds))
      (insert-node new-tree entity bounds)]
-    [(cons? child*)
+    [else
      (struct-copy
       node tree
-      [children (list-update child* index (λ (child) (update-child child entity)))])]))
+      [children
+       (vector-update child* index (λ (child)
+                                     (update-child child entity)))])]))
+
+; Vector Number [X->Y] -> Vector
+; functionally updates a vector, where the value at the index is replaced
+; by the result of calling that function on that value.
+(define (vector-update vec i func)
+  (for/vector ([(v ref) (in-indexed (in-vector vec))])
+    (if (= ref i) (func v) v)))
 
 ; Entity Number Node -> [Listof Entity]
 ; should retrieve all entities an entity could collide with.
@@ -181,5 +204,5 @@ Entity := Ship
 (define (retrieve-node entity tree [bounds BOUNDS])
   (define index (get-index tree entity bounds))
   (if index
-      (retrieve-node entity (list-ref (node-children tree) index) (/ bounds 2))
+      (retrieve-node entity (vector-ref (node-children tree) index) (/ bounds 2))
       (node-content tree)))

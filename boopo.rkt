@@ -1,5 +1,6 @@
 #lang racket
 (require 2htdp/image 2htdp/universe "quadtree.rkt")
+
 ; -------------------------------------------------------------------------------------
 #| PHYSICAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
@@ -64,7 +65,7 @@
     (player (entity (posn 360 360) (image-width SHIP) (image-height SHIP))
             0 (pvec 0 10) 0))
 (define ex-p
-  (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 0 10) 0))
+  (player (posn 360 360) PWIDTH PHEIGHT 1 (pvec 0 10) 0))
 
 ; -------------------------------------------------------------------------------------
 #| INITIALIZATION |#
@@ -74,30 +75,9 @@
   (define the-game (init-game))
   (define NODE (game-q the-game))
 
-  ; Game KeyEvent -> Game
-  (define (direct-game g ke)
-    (define p (game-p g))
-    (define current-quad (game-q g))
-    (define new-ship (direct-ship p ke))
-    (define new-turret (direct-turret (game-t g)))
-
-    (game new-ship new-turret
-          (cond
-            [(exceeds-quad? new-ship current-quad)
-             (insert-node NODE new-ship WIDTH)]
-            [else current-quad])))
-
-  ; Game -> Game
-  (define (update-game g)
-    (game (fly-ship (game-p g))
-          (rotate-turret (game-t g))
-          (if (zero? (player-magni (game-p g)))
-              (game-q g)
-              (insert-node NODE (game-p g) WIDTH))))
-
   (big-bang (init-game)
             [on-key direct-game]
-            [on-tick update-game .25]
+            [on-tick update-game 1/28]
             [to-draw render-game]
             [state #t]))
 
@@ -107,7 +87,7 @@
   ; the game doesn't insert the player into the quadtree until after they move,
   ; the turret is inserted before play b/c it never moves and can act as a
   ; "base" node for re-insertion, so we don't have to constantly reinsert it.
-  (game (init-player) turret (insert-node ROOT turret WIDTH)))
+  (game (init-player) turret (insert-node VROOT turret WIDTH)))
 
 ; -> Player
 (define (init-player)
@@ -121,6 +101,28 @@
   (entity (posn (random WIDTH) (random HEIGHT))
           (image-width TURRET) (image-height TURRET)))
 
+; Game KeyEvent -> Game
+(define (direct-game g ke)
+  (define p (game-p g))
+  (define current-quad (game-q g))
+  (define new-ship (direct-ship p ke))
+  (define new-turret (direct-turret (game-t g)))
+
+  (game new-ship new-turret
+        (cond
+          [(exceeds-quad? new-ship current-quad)
+           (insert-node VROOT new-ship WIDTH)]
+          [else current-quad])))
+
+; Game -> Game
+(define (update-game g)
+  (collect-garbage 'incremental)
+  (define new-ship (fly-ship (game-p g)))
+  (game new-ship
+        (rotate-turret (game-t g))
+        (if (zero? (player-magni new-ship))
+            (game-q g)
+            (insert-node VROOT new-ship WIDTH))))
 ; -------------------------------------------------------------------------------------
 #| LOGIC |#
 ; -------------------------------------------------------------------------------------
@@ -205,8 +207,8 @@
   (define s (player-magni pl))
   (define t (player-turns pl))
   (match ke
-    ["left"  (move pl (modulo (add1 t) MAX-TURNS))]
-    ["right" (move pl (modulo (sub1 t) MAX-TURNS))]
+    ["left"  (turn pl (modulo (add1 t) MAX-TURNS))]
+    ["right" (turn pl (modulo (sub1 t) MAX-TURNS))]
     ["up"    (struct-copy player pl [magni (intrvl add1 s)])]
     ["down"  (struct-copy player pl [magni (intrvl sub1 s)])]
     ["r"     (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 1 0) INIT-TURN)]
@@ -227,7 +229,7 @@
     [else new]))
 
 ; Player Number -> Player
-(define (move pl turn#)
+(define (turn pl turn#)
   (struct-copy player pl
                [veloc (pvec (cos~ (* TURN-RATE turn#))
                             (sin~ (* TURN-RATE turn#)))]
@@ -242,7 +244,8 @@
   (define s       (player-magni pl))
   (define new-loc (loc+ loc (rotate-quad (vec-scale vel s))))
   ; - IN -
-  (if (and (<= 0 (posn-x new-loc) WIDTH) (<= 0 (posn-y new-loc) HEIGHT))
+  (if (and (<= 0 (posn-x new-loc) WIDTH)
+           (<= 0 (posn-y new-loc) HEIGHT))
       ;(struct-copy player pl [coord new-loc])
       #;(player (struct-copy entity pl [coord new-loc])
                 (player-magni pl) (player-veloc pl) (player-turns pl))
@@ -266,10 +269,9 @@
 ; -------------------------------------------------------------------------------------
 ; Game -> Image
 (define (render-game g)
-  (render-ui (game-p g)
-             (render-ship (game-p g)
-                          (render-turret (game-t g)
-                                         (render-bg (game-p g) BACKG)))))
+  (render-ship (game-p g)
+               (render-turret (game-t g)
+                              (render-bg (game-p g) BACKG))))
 
 ; Player Image -> Image
 (define (render-ui pl im)
@@ -299,7 +301,7 @@
           (posn-y coords)
           (/ (difference (posn-x coords) 360)
              360)
-          (/ (difference (posn-y coords) 360) 
+          (/ (difference (posn-y coords) 360)
              360)))
 
 ; Number Number -> Number
@@ -321,15 +323,10 @@
 ; and an amount to scroll by:
 ; return a new image resulting from translating the given corner by x and y
 (define (scroll bg x-coord y-coord x-rate y-rate)
-  (define cur-x (+ INIT_X (* (- x-coord 360) x-rate)))
-  (define cur-y (+ INIT_Y (* (- y-coord 360) y-rate)))
+  (define new-x (+ INIT_X (* (- x-coord 360) x-rate)))
+  (define new-y (+ INIT_Y (* (- y-coord 360) y-rate)))
   ; - IN -
-  (overlay/align 'left 'top
-                 (render-info (list cur-x cur-y))
-                 (crop cur-x cur-y WIDTH HEIGHT bg)))
-
-#;(define start-game
-    (thread start))
+  (crop new-x new-y WIDTH HEIGHT bg))
 
 ; [Listof Number] -> Image
 ; takes in a list of information, transforms it into strings, then appends
@@ -340,3 +337,17 @@
                           (list "cur-x:" "cur-y:")
                           lo-str))
   (text (apply string-append label+info) 20 'black))
+#| (text
+(for/fold ([str_acc ""])
+          ([str-info (in-list info*)]
+           [str-label (in-list '("cur-x:" "cur-y:"))])
+  (string-append str-label " " (number->string str-info) " " str_acc)) 20 'black) |#
+
+; Number X [Listof [X -> Y]] -> [Listof Benchmarks]
+(define (benchmark-funcs tm input . funcs)
+  (for ([func funcs])
+    (displayln func)
+    (time (for ([i (in-range tm)])
+            (func input)))))
+#;(define start-game
+    (thread start))
