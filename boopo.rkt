@@ -14,21 +14,21 @@
 ; -------------------------------------------------------------------------------------
 #| VISUAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
-;(define BACKG (empty-scene WIDTH HEIGHT))
-(define SPACE (bitmap/file "graphics/big_space.bmp"))
-(define BACKG SPACE)
-;(define SHIP (star-polygon (/ 720 15) 5 1 'solid 'thistle))
-;(define SHIP (triangle/sss 50 50 20 'solid 'thistle))
-(define SHIP (rotate 180 (bitmap/file "graphics/player-ship.png")))
-(define TURRET (circle 15 'solid 'orange))
-(define PWIDTH (image-width SHIP))
-(define PHEIGHT (image-height SHIP))
-(define BWIDTH (image-width BACKG))
-(define BHEIGHT (image-height BACKG))
+; (define BACKG    (empty-scene WIDTH HEIGHT))
+(define SPACE    (bitmap/file "graphics/big_space.bmp"))
+(define BACKG    SPACE)
+; (define SHIP     (star-polygon (/ 720 15) 5 1 'solid 'thistle))
+; (define SHIP     (triangle/sss 50 50 20 'solid 'thistle))
+(define SHIP     (rotate 180   (bitmap/file "graphics/player-ship.png")))
+(define TURRET   (circle 15 'solid 'orange))
+(define PWIDTH   (image-width SHIP))
+(define PHEIGHT  (image-height SHIP))
+(define BWIDTH   (image-width BACKG))
+(define BHEIGHT  (image-height BACKG))
 (define BXCENTER (/ BWIDTH 2))
 (define BYCENTER (/ BHEIGHT 2))
-(define INIT_X (/ BWIDTH 4)) ; the initial x and y coordinates on the background
-(define INIT_Y (/ BHEIGHT 4))
+(define INIT_X   (/ BWIDTH 4)) ; the initial x and y coordinates on the background
+(define INIT_Y   (/ BHEIGHT 4))
 
 ; -------------------------------------------------------------------------------------
 #| DATA |#
@@ -65,7 +65,8 @@
     (player (entity (posn 360 360) (image-width SHIP) (image-height SHIP))
             0 (pvec 0 10) 0))
 (define ex-p
-  (player (posn 360 360) PWIDTH PHEIGHT 1 (pvec 0 10) 0))
+  (player (posn 360 360) PWIDTH PHEIGHT
+          1 (pvec 0 1) 0))
 
 ; -------------------------------------------------------------------------------------
 #| INITIALIZATION |#
@@ -75,11 +76,18 @@
   (define the-game (init-game))
   (define NODE (game-q the-game))
 
+  ; wrap the handlers with another function so they can use the base NODE with
+  ; the turret to insert into.
+  (define (update-with-base game)
+    (update-game game NODE))
+  (define (direct-with-base game key)
+    (direct-game key NODE))
+
   (big-bang (init-game)
-            [on-key direct-game]
-            [on-tick update-game 1/28]
+            [on-key  direct-with-base]
+            [on-tick update-with-base]
             [to-draw render-game]
-            [state #t]))
+            [state   #t]))
 
 ; -> Game
 (define (init-game)
@@ -101,28 +109,7 @@
   (entity (posn (random WIDTH) (random HEIGHT))
           (image-width TURRET) (image-height TURRET)))
 
-; Game KeyEvent -> Game
-(define (direct-game g ke)
-  (define p (game-p g))
-  (define current-quad (game-q g))
-  (define new-ship (direct-ship p ke))
-  (define new-turret (direct-turret (game-t g)))
 
-  (game new-ship new-turret
-        (cond
-          [(exceeds-quad? new-ship current-quad)
-           (insert-node VROOT new-ship WIDTH)]
-          [else current-quad])))
-
-; Game -> Game
-(define (update-game g)
-  (collect-garbage 'incremental)
-  (define new-ship (fly-ship (game-p g)))
-  (game new-ship
-        (rotate-turret (game-t g))
-        (if (zero? (player-magni new-ship))
-            (game-q g)
-            (insert-node VROOT new-ship WIDTH))))
 ; -------------------------------------------------------------------------------------
 #| LOGIC |#
 ; -------------------------------------------------------------------------------------
@@ -192,6 +179,25 @@
       v1
       v2))
 ;;----------GAME----------;;
+; Game KeyEvent Node-> Game
+(define (direct-game g ke root)
+  (define p (game-p g))
+  (define current-quad (game-q g))
+  (define new-ship (direct-ship p ke))
+  (define new-turret (direct-turret (game-t g)))
+
+  (game new-ship new-turret
+        (insert-node root new-ship WIDTH)))
+
+; Game -> Game
+(define (update-game g root)
+  (collect-garbage 'incremental)
+  (define new-ship (fly-ship (game-p g)))
+  (game new-ship
+        (rotate-turret (game-t g))
+        (if (zero? (player-magni new-ship))
+            (game-q g)
+            (insert-node root new-ship WIDTH))))
 
 ; Player Node -> Boolean
 ; consumes a player and a quadtree, determines if the player has moved outside
@@ -212,7 +218,7 @@
     ["up"    (struct-copy player pl [magni (intrvl add1 s)])]
     ["down"  (struct-copy player pl [magni (intrvl sub1 s)])]
     ["r"     (player (posn 360 360) PWIDTH PHEIGHT 0 (pvec 1 0) INIT-TURN)]
-    [_ pl]))
+    [_       pl]))
 
 ; Turret -> Turret
 ; for now, there is nothing you can do with the turret. If it turns out that
@@ -224,9 +230,9 @@
 (define (intrvl proc n)
   (define new (proc n))
   (cond
-    [(< new 0) 0]
+    [(< new 0)         0]
     [(> new MAX-SPEED) MAX-SPEED]
-    [else new]))
+    [else              new]))
 
 ; Player Number -> Player
 (define (turn pl turn#)
@@ -246,9 +252,6 @@
   ; - IN -
   (if (and (<= 0 (posn-x new-loc) WIDTH)
            (<= 0 (posn-y new-loc) HEIGHT))
-      ;(struct-copy player pl [coord new-loc])
-      #;(player (struct-copy entity pl [coord new-loc])
-                (player-magni pl) (player-veloc pl) (player-turns pl))
       (player new-loc PWIDTH PHEIGHT
               (player-magni pl) (player-veloc pl) (player-turns pl))
       pl))
