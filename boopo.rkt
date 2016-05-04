@@ -20,7 +20,9 @@
 ; (define SHIP     (star-polygon (/ 720 15) 5 1 'solid 'thistle))
 ; (define SHIP     (triangle/sss 50 50 20 'solid 'thistle))
 (define SHIP     (rotate 180   (bitmap/file "graphics/player-ship.png")))
-(define TURRET   (circle 15 'solid 'orange))
+(define TURRET   (overlay/align 'right 'center
+                                (circle 15 'solid 'orange)
+                                (rectangle 60 15 'solid 'orange)))
 (define PWIDTH   (image-width SHIP))
 (define PHEIGHT  (image-height SHIP))
 (define BWIDTH   (image-width BACKG))
@@ -81,9 +83,9 @@
   (define (update-with-base game)
     (update-game game NODE))
   (define (direct-with-base game key)
-    (direct-game key NODE))
+    (direct-game game key NODE))
 
-  (big-bang (init-game)
+  (big-bang the-game
             [on-key  direct-with-base]
             [on-tick update-with-base]
             [to-draw render-game]
@@ -241,8 +243,6 @@
                             (sin~ (* TURN-RATE turn#)))]
                [turns turn#]))
 
-
-
 ; Player -> Player
 (define (fly-ship pl)
   (define vel     (player-veloc pl))
@@ -273,7 +273,7 @@
 ; Game -> Image
 (define (render-game g)
   (render-ship (game-p g)
-               (render-turret (game-t g)
+               (render-turret (game-t g) (game-p g)
                               (render-bg (game-p g) BACKG))))
 
 ; Player Image -> Image
@@ -291,10 +291,16 @@
    (posn-y (entity-coord pl))
    im))
 
-; Turret Image -> Image
-(define (render-turret tr im)
+; Turret Image Player -> Image
+(define (render-turret tr pl im)
   (define crds (entity-coord tr))
-  (place-image TURRET (posn-x crds) (posn-y crds) im))
+  (place-image (track crds TURRET (entity-coord pl)) (posn-x crds) (posn-y crds) im))
+
+; Turret Image Posn -> Image
+(define (track tr im pl)
+  (rotate (- (radians->degrees (atan (- (posn-x tr) (posn-x pl))
+                                     (- (posn-y tr) (posn-y pl)))) 90)
+          im))
 
 ; Player Image -> Image
 (define (render-bg pl im)
