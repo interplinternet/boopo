@@ -280,7 +280,7 @@
   (collect-garbage 'incremental)
   (define new-ship (fly-ship (game-p g)))
   (game new-ship
-        (rotate-turret (game-t g) (game-p g))
+        (update-turret (game-t g) (game-p g))
         (game-o g)
         (if (zero? (player-magni new-ship))
             (game-q g)
@@ -334,7 +334,7 @@
     [_ pl]))
 
 ; Player Turret -> Turret
-(define (rotate-turret tr pl)
+(define (update-turret tr pl)
   (define tpos (entity-coord tr))
   (define ppos (entity-coord pl))
   (struct-copy turret tr
@@ -357,9 +357,6 @@
 ; -------------------------------------------------------------------------------------
 ; Game Images -> Image
 (define (render-game g img)
-  ;obstacles are static, is there a way I can prevent them from being re-rendered every
-  ;tick and simply "merge" them into the background image?
-  ; No! Because the background scrolls.
   (render-ship (game-p g)
                (render-turret (game-t g) (game-p g)
                               (overlay img (render-bg (game-p g) BACKG)))))
