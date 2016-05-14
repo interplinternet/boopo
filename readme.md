@@ -4,8 +4,8 @@
 <ul>
 <li><a href="#orgheadline1">1. Boopo's Escape</a></li>
 <li><a href="#orgheadline2">2. Current progress:</a></li>
-<li><a href="#orgheadline3">3. <span class="todo nilTODO">TODO</span> <code>[4/7]</code></a></li>
-<li><a href="#orgheadline16">4. Data</a>
+<li><a href="#orgheadline3">3. <span class="todo nilTODO">TODO</span> <code>[5/7]</code></a></li>
+<li><a href="#orgheadline17">4. Data</a>
 <ul>
 <li><a href="#orgheadline4">4.1. Pvectors</a></li>
 <li><a href="#orgheadline8">4.2. Quadtree</a>
@@ -21,14 +21,18 @@
 <li><a href="#orgheadline12">4.4.1. Notes</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline14">4.5. Turret</a></li>
-<li><a href="#orgheadline15">4.6. Obstacles</a></li>
+<li><a href="#orgheadline15">4.5. Turret</a>
+<ul>
+<li><a href="#orgheadline14">4.5.1. On-Hold</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline19">5. Rendering</a>
+<li><a href="#orgheadline16">4.6. Obstacles</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline20">5. Rendering</a>
 <ul>
-<li><a href="#orgheadline17">5.1. Progress:</a></li>
-<li><a href="#orgheadline18">5.2. Scrolling</a></li>
+<li><a href="#orgheadline18">5.1. Progress:</a></li>
+<li><a href="#orgheadline19">5.2. Scrolling</a></li>
 </ul>
 </li>
 </ul>
@@ -43,7 +47,7 @@ This is a small, simple project. You fly a spaceship from one end of the screen 
 
 A ship and turret can be rendered on the background. You can fly the ship around the screen. You turn in increments of π/6, but this can be modified to any arbitrary radian unit.
 
-# TODO <code>[4/7]</code><a id="orgheadline3"></a>
+# TODO <code>[5/7]</code><a id="orgheadline3"></a>
 
 -   [X] Determine primary data structure.
 -   [X] Implement simple quadtree for collision-checking between entities (projectiles, turret, ship).
@@ -51,9 +55,9 @@ A ship and turret can be rendered on the background. You can fly the ship around
 -   [X] Add turret tracking.
 -   [ ] Implement three-layer rendering.
 -   [ ] Map the absolute coordinates of entities on the background image to the relative coordinates of the screen and the quadtree.
--   [ ] Refactor turret tracking from a purely visual effect to a part of the turret's data structure (will have to extend turret's base entity struct with another one)
+-   [X] Refactor turret tracking from a purely visual effect to a part of the turret's data structure (will have to extend turret's base entity struct with another one)
 
-# Data<a id="orgheadline16"></a>
+# Data<a id="orgheadline17"></a>
 
 ## Pvectors<a id="orgheadline4"></a>
 
@@ -64,7 +68,7 @@ A 2-dimensional vector, `(pvector Integer Integer)` in `(pvector x y)` can repre
 
 ## Quadtree<a id="orgheadline8"></a>
 
-`(node Posn [Listof Any] (U Empty [List Node Node Node Node]))`
+`(node Posn [Listof Any] (U Empty [Vector Node Node Node Node]))`
 in `(node coord content children)`
 
 -   **Coord   :** A posn describing the upper-left coordinate of the node, which is a square.
@@ -124,16 +128,21 @@ in `(player m v l t)`
 
 2.  I think I might have to make the player mutable. Right now the player is constantly being reinserted into the quadtree, and the quadtree constantly being rebuilt, multiple times every second. It's easier to set! the player's new location and speed, and only re-insert every time it moves to a new quadrant or new objects are introduced.
 
-## Turret<a id="orgheadline14"></a>
+## Turret<a id="orgheadline15"></a>
 
-The turret hasn't been implemented yet, here are some ideas:
+The turret has been implemented, here are some ideas:
 
 -   The turret tracks the players location.
 -   every 'R' seconds, it records the player's current location.
 -   After recording three such locations, it determines a best-fit linear function between the three points (such as in a scatter-plot).
 -   It then fires at a location f(x), taking into account the player's speed along.
+-   The turret's firing field is either a number between -3 and 0, signifying the countdown until firing, or a projectile. It moves at a constant speed. It's initial direction is determined by the relative (geometric) quadrant of the player to the turret. If the player is to the lower left of the turret, the projectile will move at speed -x,y. If it's to the upper right, x,-y; directly below, 0,y; etc.
 
-## Obstacles<a id="orgheadline15"></a>
+### On-Hold<a id="orgheadline14"></a>
+
+Right now I can't implement the firing of the turret due to how the functions are called and where the quadtree is passed to. The projectiles would have to be inserted into the quadtree, and the new quadtree passed back upwards to the other handling functions. At this point, it might be better to make the quadtree the central data structure instead of the Game struct.
+
+## Obstacles<a id="orgheadline16"></a>
 
 Right now there are no obstacles to hide behind or collide into. How would I implement obstacles?
 
@@ -141,17 +150,17 @@ Right now there are no obstacles to hide behind or collide into. How would I imp
 
 Rendering obstacles is going to be kind of difficult. I can't just slap them into a 720 by 720 square, because that square scrolls as the player moves. Maybe I can generate obstacles in a square surrounding the turret? The further away you are, the less cover there is.
 
-# Rendering<a id="orgheadline19"></a>
+# Rendering<a id="orgheadline20"></a>
 
 I think I'll represent the game visually as a three-layered image. The bottom image is the background (land masses, some clouds, water, space, etc.). The second image contains the ships, obstacles, and turrets. The third image might have more clouds.
 I'll look into parallax scrolling too, which could be scaled by the player's magnitude, or maybe even the player's angle.
 
-## Progress:<a id="orgheadline17"></a>
+## Progress:<a id="orgheadline18"></a>
 
 Renders by overlaying the ship over the turret over the background.
 The background is rendered by "scrolling" a larger image via successive cropping around the player.
 
-## Scrolling<a id="orgheadline18"></a>
+## Scrolling<a id="orgheadline19"></a>
 
 Takes a background image, the current coordinates of the upper-left corner, and the rate at which the background scrolls by x- and y-coords. It produces a new image, cropped to the dimensions of the screen such that the player is centered, with the background "scrolled" in the opposite direction by the player's speed.
 The initial coordinates are determined by a constant, which is the coordinate location of the viewport on the background screen. As the player moves around the screen, the background is scrolled by their speed per tick.
