@@ -5,34 +5,34 @@
 <li><a href="#orgheadline1">1. Boopo's Escape</a></li>
 <li><a href="#orgheadline2">2. Current progress:</a></li>
 <li><a href="#orgheadline3">3. <span class="todo nilTODO">TODO</span> <code>[5/7]</code></a></li>
-<li><a href="#orgheadline17">4. Data</a>
+<li><a href="#orgheadline19">4. Data</a>
 <ul>
 <li><a href="#orgheadline4">4.1. Pvectors</a></li>
-<li><a href="#orgheadline8">4.2. Quadtree</a>
+<li><a href="#orgheadline10">4.2. Quadtree</a>
 <ul>
-<li><a href="#orgheadline5">4.2.1. Update to main module:</a></li>
-<li><a href="#orgheadline6">4.2.2. Multiple insertions into a quadtree</a></li>
-<li><a href="#orgheadline7">4.2.3. Rectangles vs. Square quad</a></li>
+<li><a href="#orgheadline7">4.2.1. Update to main module:</a></li>
+<li><a href="#orgheadline8">4.2.2. Multiple insertions into a quadtree</a></li>
+<li><a href="#orgheadline9">4.2.3. Rectangles vs. Square quad</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline9">4.3. Entity</a></li>
-<li><a href="#orgheadline13">4.4. Player</a>
+<li><a href="#orgheadline11">4.3. Entity</a></li>
+<li><a href="#orgheadline15">4.4. Player</a>
 <ul>
-<li><a href="#orgheadline12">4.4.1. Notes</a></li>
+<li><a href="#orgheadline14">4.4.1. Notes</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline15">4.5. Turret</a>
+<li><a href="#orgheadline17">4.5. Turret</a>
 <ul>
-<li><a href="#orgheadline14">4.5.1. On-Hold</a></li>
+<li><a href="#orgheadline16">4.5.1. On-Hold</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline16">4.6. Obstacles</a></li>
+<li><a href="#orgheadline18">4.6. Obstacles</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline20">5. Rendering</a>
+<li><a href="#orgheadline22">5. Rendering</a>
 <ul>
-<li><a href="#orgheadline18">5.1. Progress:</a></li>
-<li><a href="#orgheadline19">5.2. Scrolling</a></li>
+<li><a href="#orgheadline20">5.1. Progress:</a></li>
+<li><a href="#orgheadline21">5.2. Scrolling</a></li>
 </ul>
 </li>
 </ul>
@@ -57,7 +57,7 @@ A ship and turret can be rendered on the background. You can fly the ship around
 -   [ ] Map the absolute coordinates of entities on the background image to the relative coordinates of the screen and the quadtree.
 -   [X] Refactor turret tracking from a purely visual effect to a part of the turret's data structure (will have to extend turret's base entity struct with another one)
 
-# Data<a id="orgheadline17"></a>
+# Data<a id="orgheadline19"></a>
 
 ## Pvectors<a id="orgheadline4"></a>
 
@@ -66,7 +66,7 @@ A 2-dimensional vector, `(pvector Integer Integer)` in `(pvector x y)` can repre
 -   **x:** the ship's velocity in the horizontal plane, or its horizontal distance from the origin
 -   **y:** the ship's velocity in the vertical plane, or its vertical distance from the origin
 
-## Quadtree<a id="orgheadline8"></a>
+## Quadtree<a id="orgheadline10"></a>
 
 `(node Posn [Listof Any] (U Empty [Vector Node Node Node Node]))`
 in `(node coord content children)`
@@ -77,29 +77,29 @@ in `(node coord content children)`
 
 See quad-notes.
 
-### Update to main module:<a id="orgheadline5"></a>
+### Update to main module:<a id="orgheadline7"></a>
 
 I have to change the big-bang function to update the quadtree. I can see two options here right off
-the bat: We refactor the module so that the quadtree is now the defining
-data structure, instead of the game struct. I'm not sure how I'll modify
-the quadtree module so that it doesn't just toss away player information
-(since it just uses entity, a supertype). The other option is two insert
-the quadtree as an additional field to the game struct. This feels
-redudant, since we'll be carrying along all the player and turret
-information in both the game struct AND the quadtree.
+the bat: 
 
--   **Status:** I made the quadtree a secondary data structure, it's carried along in the field of the game-struct. I'll have to look at this more closely. Right now it's VERY slow to move around the screen.
-    -   Whoops! It runs super slow because it recalculates the quad-tree every tick, instead of when objects move.
+1.  We refactor the module so that the quadtree is now the defining data structure, instead of the game struct.
 
-### Multiple insertions into a quadtree<a id="orgheadline6"></a>
+    -   I'm not sure how I'll modify the quadtree module so that it doesn't just toss away player information (since it just uses entity, a supertype).
+    -   To move the player you have to walk the quadtree until you find them, and then you have to update them. That's a little inefficient.
+
+2.  Insert the quadtree as an additional field to the game struct.
+
+    -   This feels redudant, since we'll be carrying along all the player and turret information in both the game struct AND the quadtree. If I do it this way though, I can just use `set!` to update the player when they move, and that change will automatically be reflected in the quadtree instead of having to walk the quadtree to update the player's direction and movement.
+
+### Multiple insertions into a quadtree<a id="orgheadline8"></a>
 
 I could add support for inserting multiple items during one walk (instead of having to walk the tree once per insertion) by using a folding or accumulated function. The accumulator represents the tree so far, and the function consumes an arbitrary list of things to insert. Every node you check if any entity fits into a child-node and insert it appropriately.
 
-### Rectangles vs. Square quad<a id="orgheadline7"></a>
+### Rectangles vs. Square quad<a id="orgheadline9"></a>
 
 Note, I'm going to have to reconfigure the quadtree module to use rectangles instead of squares. The ship is rectangle, and the obstacles on the map are also rectang
 
-## Entity<a id="orgheadline9"></a>
+## Entity<a id="orgheadline11"></a>
 
 `(entity Posn Number Number)`
 in `(entity coord width height`
@@ -110,7 +110,7 @@ in `(entity coord width height`
 
 Right now I'm planning on having the player's struct extend the entity struct with magnitude and rotation.
 
-## Player<a id="orgheadline13"></a>
+## Player<a id="orgheadline15"></a>
 
 `(player Natural Pvector Pvector Natural)` 
 in `(player m v l t)`
@@ -120,7 +120,7 @@ in `(player m v l t)`
 -   **l:** A Pvector representing the location of the ship as the distance from the origin, the upper left, of the screen.
 -   **t:** The number of turns around the circle in "n" radian units. Used for rendering the ship at the appropriate angle and for rotating the ship during play.
 
-### Notes<a id="orgheadline12"></a>
+### Notes<a id="orgheadline14"></a>
 
 1.  The controls are fine now, but previously:
 
@@ -128,7 +128,7 @@ in `(player m v l t)`
 
 2.  I think I might have to make the player mutable. Right now the player is constantly being reinserted into the quadtree, and the quadtree constantly being rebuilt, multiple times every second. It's easier to set! the player's new location and speed, and only re-insert every time it moves to a new quadrant or new objects are introduced.
 
-## Turret<a id="orgheadline15"></a>
+## Turret<a id="orgheadline17"></a>
 
 The turret has been implemented, here are some ideas:
 
@@ -138,11 +138,11 @@ The turret has been implemented, here are some ideas:
 -   It then fires at a location f(x), taking into account the player's speed along.
 -   The turret's firing field is either a number between -3 and 0, signifying the countdown until firing, or a projectile. It moves at a constant speed. It's initial direction is determined by the relative (geometric) quadrant of the player to the turret. If the player is to the lower left of the turret, the projectile will move at speed -x,y. If it's to the upper right, x,-y; directly below, 0,y; etc.
 
-### On-Hold<a id="orgheadline14"></a>
+### On-Hold<a id="orgheadline16"></a>
 
 Right now I can't implement the firing of the turret due to how the functions are called and where the quadtree is passed to. The projectiles would have to be inserted into the quadtree, and the new quadtree passed back upwards to the other handling functions. At this point, it might be better to make the quadtree the central data structure instead of the Game struct.
 
-## Obstacles<a id="orgheadline16"></a>
+## Obstacles<a id="orgheadline18"></a>
 
 Right now there are no obstacles to hide behind or collide into. How would I implement obstacles?
 
@@ -150,17 +150,17 @@ Right now there are no obstacles to hide behind or collide into. How would I imp
 
 Rendering obstacles is going to be kind of difficult. I can't just slap them into a 720 by 720 square, because that square scrolls as the player moves. Maybe I can generate obstacles in a square surrounding the turret? The further away you are, the less cover there is.
 
-# Rendering<a id="orgheadline20"></a>
+# Rendering<a id="orgheadline22"></a>
 
 I think I'll represent the game visually as a three-layered image. The bottom image is the background (land masses, some clouds, water, space, etc.). The second image contains the ships, obstacles, and turrets. The third image might have more clouds.
 I'll look into parallax scrolling too, which could be scaled by the player's magnitude, or maybe even the player's angle.
 
-## Progress:<a id="orgheadline18"></a>
+## Progress:<a id="orgheadline20"></a>
 
 Renders by overlaying the ship over the turret over the background.
 The background is rendered by "scrolling" a larger image via successive cropping around the player.
 
-## Scrolling<a id="orgheadline19"></a>
+## Scrolling<a id="orgheadline21"></a>
 
 Takes a background image, the current coordinates of the upper-left corner, and the rate at which the background scrolls by x- and y-coords. It produces a new image, cropped to the dimensions of the screen such that the player is centered, with the background "scrolled" in the opposite direction by the player's speed.
 The initial coordinates are determined by a constant, which is the coordinate location of the viewport on the background screen. As the player moves around the screen, the background is scrolled by their speed per tick.
