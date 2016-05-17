@@ -124,24 +124,20 @@ Entity := Ship
 ; and returns the index of the quadrant it belongs in.
 ; Assumes an already split node. #f if it cannot fit.
 ; From left->right, top->bottom, 0->3
-(define (get-index tree location [bounds BOUNDS])
+(define (get-index tree an-entity [bounds BOUNDS])
   (define quadrants
-    (if (empty? (node-children tree))
+    (if (zero? (vector-length (node-children tree)))
         (node-children (split tree bounds))
         (node-children tree)))
 
   (define half-bounds (/ bounds 2))
   ; [Listof Node] Number -> Node
   ; the accumulator represents the index of the node being investigated.
-  (define (index/a subquads index)
-    #| (cond
-      [(= index 4) (if (fits? (vector-ref subquads index) location half-bounds) index #f)]
-      [(fits? (vector-ref subquads index) location half-bounds) index]
-    [else (index/a subquads (add1 index))])) |#
-    (for/first ([(q i) (in-indexed (in-vector subquads))]
-                #:when (fits? q location half-bounds))
-      i))
-  (index/a quadrants 0))
+  (define (index/a subquads)
+    (for/first ([(quad index) (in-indexed (in-vector subquads))]
+                #:when (fits? quad an-entity half-bounds))
+      index))
+  (index/a quadrants))
 
 ; Node Entity Number -> Boolean
 (define (fits? child thing [bounds BOUNDS])

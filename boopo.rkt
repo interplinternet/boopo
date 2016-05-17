@@ -1,5 +1,5 @@
 #lang racket
-(require 2htdp/image 2htdp/universe "quadtree.rkt" racket/trace)
+(require 2htdp/image 2htdp/universe "quadtree.rkt" racket/trace racket/vector)
 
 ; -------------------------------------------------------------------------------------
 #| PHYSICAL CONSTANTS |#
@@ -10,12 +10,15 @@
 (define MAX-TURNS (/ (* 2 pi) TURN-RATE))
 (define MAX-SPEED 10)
 (define INIT-TURN 0)
-
+(define MAX-OBST 12)
+(define MIN-OBST 6)
+(define VROOT (node (posn 0 0) '() #()))
+(bounds-set! WIDTH)
 ; -------------------------------------------------------------------------------------
 #| VISUAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
 (define SPACE    (bitmap/file "graphics/big_space.bmp"))
-(define BACKG    SPACE)
+(define BACKG    (crop 0 0 720 720 SPACE))
 (define SHIP     (rotate -90 (bitmap/file "graphics/player-ship.png")))
 (define TURRET   (rotate 270 (overlay/align 'right 'center
                                          (circle 15 'solid 'orange)
@@ -28,9 +31,7 @@
 (define BYCENTER (/ BHEIGHT 2))
 (define INIT_X   (/ BWIDTH 4)) ; the initial x and y coordinates on the background
 (define INIT_Y   (/ BHEIGHT 4))
-(define MAX-OBST 12)
-(define MIN-OBST 6)
-(define VROOT (node (posn INIT_X INIT_Y) '() #()))
+
 ; -------------------------------------------------------------------------------------
 #| DATA |#
 ; -------------------------------------------------------------------------------------
@@ -39,9 +40,6 @@
 ; in (pvec x y v)
 ; -- x is the x-val
 ; -- y is the y-val
-; New location = velocity applied to current location. Velocity is also a vectory
-; A location can be either a singular point
-; or the vector representing the difference between location and origin
 
 ;(struct player (magni veloc locat turns) #:transparent)
 (struct player entity (magni veloc turns) #:transparent)
@@ -53,7 +51,8 @@
 
 (struct game (p t o q) #:transparent)
 ; (game Player Entity [Listof Entity] Quadtree)
-; contains the player, the turret, a list of obstacles, and a quadtree for collision detection.
+; contains the player, the turret, the list of obstacles,
+; and a quadtree for collision detection.
 
 (struct turret entity (rotat fire))
 ; turret = (player (posn Rational Rational) Integer Integer Integer Rational Integer
@@ -69,7 +68,38 @@
 (define ex-p
   (player (posn 360 360) PWIDTH PHEIGHT
           1 (pvec 0 1) 0))
-
+(define ex-node
+  (node
+   (posn 0 0)
+   (list (entity (posn 345 318) 26 32) (turret (posn 351 508) 30 60 0 0))
+   (vector
+    (node (posn 0 0) '() '#())
+    (node
+     (posn 360 0)
+     (list
+      (entity (posn 483 231) 10 23)
+      (entity (posn 508 108) 13 18)
+      (entity (posn 500 287) 16 26))
+     (vector
+      (node (posn 360 0) '() '#())
+      (node (posn 540 0) (list (entity (posn 696 56) 16 15)) '#())
+      (node
+       (posn 360 180)
+       (list
+        (player
+         (posn 465.0 316.0)
+         69
+         43
+         2
+         (pvec 0.6666666666666666 0.6666666666666666)
+         1.0))
+       '#())
+      (node (posn 540 180) '() '#())))
+    (node (posn 0 360) (list (entity (posn 248 625) 13 20)) '#())
+    (node
+     (posn 360 360)
+     (list (entity (posn 540 363) 21 20) (entity (posn 399 463) 32 15))
+     '#()))))
 ; -------------------------------------------------------------------------------------
 #| INITIALIZATION |#
 ; ------------------------------------------------------------------------------------
@@ -93,7 +123,7 @@
 
   (big-bang the-game
             [on-key    direct-with-base]
-            [on-tick   update-with-base]
+            [on-tick   update-with-base 1/28]
             [to-draw   render-with-base]
             [stop-when game-over?]
             [state     #f]))
@@ -134,8 +164,8 @@
   (turret
    (posn (random WIDTH) (random HEIGHT))
    (image-width TURRET) (image-height TURRET)
-  0
-  '()))
+   0
+   '()))
 
 ; -> [Listof Entity]
 ; returns a list containing random number of entity between n and m
@@ -165,10 +195,12 @@
 ; Maybe I can use the quadtree for this. If two generated obstacles
 ; aren't in the same node, they can't collide.
 (define (collides? candidate obst)
-  (or (and (in-width? candidate obst)
-           (in-height? candidate obst))
-      (and (in-width? obst candidate)
-           (in-height? obst candidate))))
+  #| (or (and (in-width? candidate obst)
+  (in-height? candidate obst))
+  (and (in-width? obst candidate)
+  (in-height? obst candidate)))) |#
+  (or (overlaps? candidate obst)
+      (overlaps? obst candidate)))
 
 ; Entity Entity -> Boolean
 (define (in-width? candidate obst)
@@ -180,15 +212,34 @@
 
 ; Entity Entity [Entity -> Number] [Entity -> Number] -> Boolean
 (define (in-dimension? candidate obst dimension pos)
-  (<= (pos (entity-coord candidate))
+  (<= (- (pos (entity-coord candidate)) (/ (dimension candidate) 2))
       (pos (entity-coord obst))
-      (+ (pos (entity-coord candidate)) (dimension candidate))))
+      (+ (pos (entity-coord candidate)) (/ (dimension candidate) 2))))
+
+; Entity Entity -> Boolean
+; check if the second object overlaps the first
+(define (overlaps? e1 e2)
+  (match-define (entity (posn x1 y1) width1 height1) e1)
+  (match-define (entity (posn x2 y2) width2 height2) e2)
+
+  ; Number Number -> Number Number
+  (define (+-half center width)
+    (values (- center (/ width 2))
+            (+ center (/ width 2))))
+  (define-values (left1 right1) (+-half x1 width1))
+  (define-values (top1 bot1)    (+-half y1 height1))
+  (define-values (left2 right2) (+-half x2 width2))
+  (define-values (top2 bot2)    (+-half y2 height2))
+  ; - IN -
+  (and (or (<= left1 left2 right1) (<= left1 right2 right1))
+       (or (<= top1 top2 bot1)
+           (<= top1 bot2 bot1))))
 
 ; -> Entity
 (define (gen-random-obst)
   ; a rectangle has an x- & y-coord, and a width and height.
-  (define width (random 6 33))
-  (define height (random 6 33))
+  (define width (random 6 100))
+  (define height (random 6 100))
   (entity (posn (random WIDTH)
                 (random HEIGHT))
           width
@@ -278,22 +329,15 @@
 ; Game -> Game
 (define (update-game g root)
   (collect-garbage 'incremental)
-  (define new-ship (fly-ship (game-p g)))
+  (match-define
+    (game pl tr ob qd) g)
+  (define new-ship (fly-ship pl qd))
   (game new-ship
-        (update-turret (game-t g) (game-p g))
-        (game-o g)
+        (update-turret tr pl)
+        ob
         (if (zero? (player-magni new-ship))
-            (game-q g)
+            qd
             (insert-node root new-ship WIDTH))))
-
-; Player Node -> Boolean
-; consumes a player and a quadtree, determines if the player has moved outside
-; of their current quadrant.
-; Isn't this pretty inefficient? You'd have to walk the quad, pull the
-; appropriate node, then compare the ship's coordinates (after adding the ship's
-; width and height) to the bounds of that quad
-(define (exceeds-quad? ship quad)
-  #t)
 
 ; Player -> Player
 (define (direct-ship pl ke)
@@ -308,7 +352,7 @@
     [_       pl]))
 
 ; [Number -> Number] Number -> Number
-(define (intrvl proc n)
+(define (intrvl proc n) 
   (define new (proc n))
   (cond
     [(< new 0)         0]
@@ -322,16 +366,57 @@
                             (sin~ (* TURN-RATE turn#)))]
                [turns turn#]))
 
-; Player -> Player
-(define (fly-ship pl)
+; Node Player -> [Maybe Node]
+; walks the tree and returns the node which contains the player
+(define (players-node pl qd)
+  (define (search-child* child*)
+    (for/or ([a-child (in-vector child*)])
+      (define candidate (players-node pl a-child))
+      (if (node? candidate) candidate #f)))
+  ; - IN -
+  (cond
+    [(member pl (node-content qd)) qd]
+    [else
+     (define candidate (search-child* (node-children qd)))
+     (if (node? candidate) candidate #f)]))
+
+; Player Node -> Player
+(define (fly-ship pl quad)
   (match pl
     [(player pos width height speed veloc turns)
      (=> out-of-bounds)
      (define new-loc (loc+ pos (rotate-quad (vec-scale veloc speed))))
-     (if (and (<= 0 (posn-x new-loc) WIDTH) (<= 0 (posn-y new-loc) HEIGHT))
-         (player new-loc width height speed veloc turns)
+     (define new-pl (struct-copy player pl [coord #:parent entity new-loc]))
+     (if (and (<= 0 (posn-x new-loc) WIDTH) (<= 0 (posn-y new-loc) HEIGHT)
+              (no-collisions? new-pl (players-node new-pl quad)))
+         new-pl
          (out-of-bounds))]
     [_ pl]))
+
+; Player Node -> Boolean
+(define (no-collisions? pl quad)
+  ; [Listof Entity] -> Boolean
+  (define (collisions-between? loe)
+    (andmap (λ (an-entity) (not (collides? pl an-entity)))
+            (filter-not player? loe)))
+
+  ; [Listof Node] -> Boolean
+  (define (collisions-in? children)
+    (andmap (λ (child) (no-collisions? pl child))
+            children))
+
+  (if quad
+      (match quad
+        [(node coord (list content ...) '#())
+         (collisions-between? content)]
+        [(node coord '() '#()) #t]
+        [(node coord '() (vector children ...))
+         (collisions-in? children)]
+        [(node coord (list content ...) (vector children ...))
+         (and (collisions-between? content)
+              (collisions-in? children))])
+      #t))
+
 
 ; Player Turret -> Turret
 (define (update-turret tr pl)
@@ -355,11 +440,38 @@
 ; -------------------------------------------------------------------------------------
 #| RENDERING |#
 ; -------------------------------------------------------------------------------------
-; Game Images -> Image
+; Game Images -> Image Idea: rendering via pattern-matching. Take the quadtree,
+; and use pattern-matching to recursively step through it, rendering all content along the way.
 (define (render-game g img)
   (render-ship (game-p g)
                (render-turret (game-t g) (game-p g)
-                              (overlay img (render-bg (game-p g) BACKG)))))
+                              (render-obst (game-o g)
+                                           (draw-quad (game-q g) WIDTH
+                                                      (render-bg (game-p g) BACKG))))))
+
+
+
+
+; Node Image -> Image
+(define (draw-quad node0 bounds0 img0)
+  ; [Vectorof Node] Image -> Image
+  (define (draw-children child* bounds im)
+    (match child*
+      ['#() im]
+      [(vector a-child ...)
+       (foldr (λ (sqr-to-draw rst) (draw-quad/a sqr-to-draw (/ bounds 2) rst))
+              im
+              a-child)]))
+
+  ; Node Number Image -> Image
+  (define (draw-quad/a node bounds img)
+    (draw-children (node-children node) bounds
+                   (place-image (square bounds 'outline 'red)
+                                (+ (/ bounds 2) (posn-x (node-coord node)))
+                                (+ (/ bounds 2) (posn-y (node-coord node)))
+                                img)))
+  ; - IN -
+  (draw-quad/a node0 bounds0 img0))
 
 ; Player Image -> Image
 (define (render-ui pl im)
@@ -401,13 +513,15 @@
 ; Player Image -> Image
 (define (render-bg pl im)
   (define coords (entity-coord pl))
-  (scroll im
-          (posn-x coords)
-          (posn-y coords)
-          (/ (difference (posn-x coords) 360)
-             360)
-          (/ (difference (posn-y coords) 360)
-             360)))
+  #| (scroll im
+  (posn-x coords)
+  (posn-y coords)
+  (/ (difference (posn-x coords) 360)
+  360)
+  (/ (difference (posn-y coords) 360)
+  360))) |#
+  ;(crop INIT_X INIT_Y WIDTH HEIGHT im))
+  im)
 
 ; Number Number -> Number
 ; consumes two numbers and produces the difference between them
@@ -424,6 +538,7 @@
   (define new-y (+ INIT_Y (* (- y-coord 360) y-rate)))
   ; - IN -
   (crop new-x new-y WIDTH HEIGHT bg))
+
 
 ; Posn Posn -> Number
 ; determines the distance between two cartesian points. Using this instead
