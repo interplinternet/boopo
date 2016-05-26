@@ -14,6 +14,10 @@
 (define MIN-OBST 6)
 (define VROOT (node (posn 0 0) '() #()))
 (bounds-set! WIDTH)
+(define TICKRATE 1/28)
+(define FIRERATE 3)
+(define TIME-TO-FIRE (* TICKRATE FIRERATE))
+(define MSPEED 10)
 ; -------------------------------------------------------------------------------------
 #| VISUAL CONSTANTS |#
 ; -------------------------------------------------------------------------------------
@@ -21,8 +25,10 @@
 (define BACKG    (crop 0 0 720 720 SPACE))
 (define SHIP     (rotate -90 (bitmap/file "graphics/player-ship.png")))
 (define TURRET   (rotate 270 (overlay/align 'right 'center
-                                         (circle 15 'solid 'orange)
-                                         (rectangle 60 15 'solid 'orange))))
+                                            (circle 15 'solid 'orange)
+                                            (rectangle 60 15 'solid 'orange))))
+(define MRADIUS 5)
+(define MISSILE (circle MRADIUS 'solid 'yellow))
 (define PWIDTH   (image-width SHIP))
 (define PHEIGHT  (image-height SHIP))
 (define BWIDTH   (image-width BACKG))
@@ -59,8 +65,16 @@
 ; in (turret posn r f)
 ; -- Posn is the turret's location.
 ; -- R is the turret's current rotation, in radians.
-; -- F is either a number between -3 and 0, signifying the countdown till firing,
+; -- F is either a number between 84 and 0, signifying the countdown till firing,
 ;    or a list of fired projectiles.
+
+(struct projectile entity (magni veloc))
+; A projectile is an entity which is directed in some direction at some speed.
+; Projectile = (projectile Posn Number Number Integer Rational)
+; in (projectile p width height m v)
+; -- m is the magnitude of the projectile, i.e., its speed
+; -- v is its velocity, represented as a pair of rational numbers signifying a
+; position along the unit circle, which is then scaled by its speed every turn.
 
 ; -------------------------------------------------------------------------------------
 #| DATA EXAMPLES |#
@@ -119,11 +133,11 @@
   ; wraps the renderer with another function, so it doesn't have to re-render
   ; the static obstacles every-time
   (define (render-with-base game)
-    (render-game game obst-img))
+    (render-g game obst-img))
 
   (big-bang the-game
             [on-key    direct-with-base]
-            [on-tick   update-with-base 1/28]
+            [on-tick   update-with-base TICKRATE]
             [to-draw   render-with-base]
             [stop-when game-over?]
             [state     #f]))
@@ -165,7 +179,7 @@
    (posn (random WIDTH) (random HEIGHT))
    (image-width TURRET) (image-height TURRET)
    0
-   '()))
+   TIME-TO-FIRE))
 
 ; -> [Listof Entity]
 ; returns a list containing random number of entity between n and m
@@ -195,26 +209,8 @@
 ; Maybe I can use the quadtree for this. If two generated obstacles
 ; aren't in the same node, they can't collide.
 (define (collides? candidate obst)
-  #| (or (and (in-width? candidate obst)
-  (in-height? candidate obst))
-  (and (in-width? obst candidate)
-  (in-height? obst candidate)))) |#
   (or (overlaps? candidate obst)
       (overlaps? obst candidate)))
-
-; Entity Entity -> Boolean
-(define (in-width? candidate obst)
-  (in-dimension? candidate obst entity-width posn-x))
-
-; Entity Entity -> Boolean
-(define (in-height? candidate obst)
-  (in-dimension? candidate obst entity-height posn-y))
-
-; Entity Entity [Entity -> Number] [Entity -> Number] -> Boolean
-(define (in-dimension? candidate obst dimension pos)
-  (<= (- (pos (entity-coord candidate)) (/ (dimension candidate) 2))
-      (pos (entity-coord obst))
-      (+ (pos (entity-coord candidate)) (/ (dimension candidate) 2))))
 
 ; Entity Entity -> Boolean
 ; check if the second object overlaps the first
@@ -232,8 +228,7 @@
   (define-values (top2 bot2)    (+-half y2 height2))
   ; - IN -
   (and (or (<= left1 left2 right1) (<= left1 right2 right1))
-       (or (<= top1 top2 bot1)
-           (<= top1 bot2 bot1))))
+       (or (<= top1 top2 bot1)     (<= top1 bot2 bot1))))
 
 ; -> Entity
 (define (gen-random-obst)
@@ -332,12 +327,14 @@
   (match-define
     (game pl tr ob qd) g)
   (define new-ship (fly-ship pl qd))
+  (define ship-in-quad (insert-node root new-ship WIDTH))
+  (define projectile-or-num (turret-fire tr))
   (game new-ship
         (update-turret tr pl)
         ob
-        (if (zero? (player-magni new-ship))
-            qd
-            (insert-node root new-ship WIDTH))))
+        (if (projectile? projectile-or-num)
+            (insert-node ship-in-quad projectile-or-num WIDTH)
+            ship-in-quad)))
 
 ; Player -> Player
 (define (direct-ship pl ke)
@@ -352,7 +349,7 @@
     [_       pl]))
 
 ; [Number -> Number] Number -> Number
-(define (intrvl proc n) 
+(define (intrvl proc n)
   (define new (proc n))
   (cond
     [(< new 0)         0]
@@ -393,7 +390,9 @@
          (out-of-bounds))]
     [_ pl]))
 
-; Player Node -> Boolean
+; Player Node -> Boolean better collision detection might combine this with players-node.
+; You step through the node until you reach the players, checking for collisions along the
+; way.
 (define (no-collisions? pl quad)
   ; [Listof Entity] -> Boolean
   (define (collisions-between? loe)
@@ -406,15 +405,14 @@
             children))
 
   (if quad
-      (match quad
-        [(node coord (list content ...) '#())
-         (collisions-between? content)]
-        [(node coord '() '#()) #t]
-        [(node coord '() (vector children ...))
-         (collisions-in? children)]
-        [(node coord (list content ...) (vector children ...))
-         (and (collisions-between? content)
-              (collisions-in? children))])
+      (cond
+        [(empty? (node-content quad))
+         (collisions-in? (node-children quad))]
+        [(zero? (vector-length (node-children quad)))
+         (collisions-between? (node-content quad))]
+        [else
+         (and (collisions-between? (node-content quad))
+              (collisions-in? (node-children quad)))])
       #t))
 
 
@@ -422,9 +420,31 @@
 (define (update-turret tr pl)
   (define tpos (entity-coord tr))
   (define ppos (entity-coord pl))
+  (define new-turret
+    (struct-copy turret tr
+                 [rotat (atan (- (posn-x tpos) (posn-x ppos))
+                              (- (posn-y tpos) (posn-y ppos)))]))
+  ; - IN -
+  (if (zero? (turret-fire new-turret))
+      (fire-projectile new-turret)
+      (countdown new-turret)))
+
+; Turret -> Turret
+; This creates a projectile. The projectile is kept in the turret's struct until
+; it's inserted into the quadtree, whereupon the counter is reset to the amount
+; of time until firing.
+(define (fire-projectile tr)
+  (match tr
+    [(turret coord width height rotation firing)
+     (turret coord width height rotation
+             (projectile coord (image-width MISSILE) (image-height MISSILE)
+                         MSPEED rotation))]))
+
+; Turret -> Turret
+(define (countdown tr)
+  (define count (turret-fire tr))
   (struct-copy turret tr
-               [rotat (atan (- (posn-x tpos) (posn-x ppos))
-                            (- (posn-y tpos) (posn-y ppos)))]))
+               [fire (sub1 count)]))
 
 ; Pvec -> Pvec
 ; rotates the quadrant in a cartesian plane a vector is in
@@ -434,6 +454,7 @@
     [(pvec x y) (pvec x (- y))]))
 
 ; Game -> Boolean
+; the game is over if the player is hit by a projectile or reaches the end-zone.
 (define (game-over? g)
   #f)
 
@@ -448,9 +469,60 @@
                               (render-obst (game-o g)
                                            (draw-quad (game-q g) WIDTH
                                                       (render-bg (game-p g) BACKG))))))
+(define (render-g g img0)
+  (define quad (game-q g))
+  ; - IN -
+  (render-tree quad img0))
 
+; Node Image -> Image
+(define (render-tree tree img)
+  (cond
+    [(and (zero-content? tree) (zero-children? tree))
+     img]
+    [(and (zero-content? tree) (not (zero-children? tree)))
+     (render-child* (node-children tree) img)]
+    [(and (not (zero-content? tree)) (not (zero-children? tree)))
+     (define new-img (render-content (node-content tree) img))
+     (render-child* (node-children tree) new-img)]
+    [(and (not (zero-content? tree)) (zero-children? tree))
+     (render-content (node-content tree) img)]))
 
+; Node -> Boolean
+(define (zero-children? q)
+  (zero? (vector-length (node-children q))))
 
+; Node -> Boolean
+(define (zero-content? q)
+  (empty? (node-content q)))
+
+; [Listof Entity] Image -> Image
+; renders a list of entities onto an image
+(define (render-content things base-img)
+  (foldl (λ (something img)
+           (render-entity something img))
+         base-img
+         things))
+
+; Entity Image -> Image
+; renders a single entity onto another image
+(define (render-entity thing img)
+  (cond
+    [(player? thing) (render-ship thing img)]
+    [(turret? thing) (render-turret thing img)] ; needs player!
+    [(projectile? thing) (render-one-obst thing img)]
+    [else (render-one-obst thing img)]))
+
+; Entity Image -> Image
+(define (render-one-obst thing img)
+  (match thing
+    [(entity (posn x y) width height)
+     (place-image (rectangle width height 'solid 'red) x y img)]))
+
+; [Vectorof Child] Image -> Image
+(define (render-child* child* img)
+  (for/fold ([base img])
+            ([a-child (in-vector child*)])
+    (render-tree a-child base)))
 
 ; Node Image -> Image
 (define (draw-quad node0 bounds0 img0)
@@ -473,11 +545,7 @@
   ; - IN -
   (draw-quad/a node0 bounds0 img0))
 
-; Player Image -> Image
-(define (render-ui pl im)
-  (overlay/align 'center 'bottom
-                 (text (number->string (player-magni pl)) 20 'black)
-                 im))
+
 
 ; Player Image -> Image
 (define (render-ship pl im)
@@ -547,6 +615,14 @@
 (define (distance point origin)
   (sqrt (+ (sqr (- (posn-x point) (posn-x origin)))
            (sqr (- (posn-x point) (posn-y origin))))))
+;--------------------------------------------------------------------------------
+#| DEBUGGING |#
+;--------------------------------------------------------------------------------
+; Player Image -> Image
+(define (render-ui pl im)
+  (overlay/align 'center 'bottom
+                 (text (number->string (player-magni pl)) 20 'black)
+                 im))
 
 ; [Listof Number] -> Image
 ; takes in a list of information, transforms it into strings, then appends
@@ -559,6 +635,8 @@
   (text (apply string-append label+info) 20 'black))
 
 ; Number X [Listof [X -> Y]] -> [Listof Benchmarks]
+; time the running of multiple functions over a base input
+; over a period of time in ticks.
 (define (benchmark-funcs tm input . funcs)
   (for ([func funcs])
     (displayln func)
